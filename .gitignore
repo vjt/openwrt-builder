@@ -1,0 +1,6 @@
+.env
+config.yaml
+packages/
+*.ipk
+__pycache__/
+*.pyc
