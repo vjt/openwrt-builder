@@ -1,0 +1,2 @@
+python-telegram-bot==22.6
+PyYAML==6.0.2
