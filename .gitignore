@@ -4,3 +4,4 @@ packages/
 *.ipk
 __pycache__/
 *.pyc
+.claude
