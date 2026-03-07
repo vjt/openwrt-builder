@@ -283,13 +283,15 @@ class PackageBuilder:
             text=True,
         )
         if result.returncode != 0:
-            # Filter stderr for actual error messages, not make cascade noise
+            # Combine stdout+stderr and filter out make cascade noise
+            all_output = (result.stdout or "") + (result.stderr or "")
             error_lines = [
-                line for line in result.stderr.splitlines()
-                if line.strip() and not line.startswith("make")
-                and "Error " not in line
+                line for line in all_output.splitlines()
+                if line.strip()
+                and not line.startswith("make[")
+                and not line.startswith("make:")
+                and not line.startswith("Checking ")
             ]
-            # Take last 30 meaningful lines
             stderr_tail = "\n".join(error_lines[-30:])
             raise RuntimeError(
                 f"SDK build failed for {self.name}:\n{stderr_tail}"
