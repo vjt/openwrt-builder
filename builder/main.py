@@ -107,7 +107,8 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
 
             prev = state.get_repo(name)
             already_notified = (
-                prev is not None
+                force_repo is None
+                and prev is not None
                 and prev.get("status") == "failed"
                 and prev.get("notified", False)
             )
