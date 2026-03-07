@@ -14,7 +14,7 @@ Two Docker containers sharing a `runtime/` directory:
 
 | File | Purpose |
 |---|---|
-| `docker-compose.yml` | Defines both services + `runtime/` bind mounts (feed, sdk, repos) |
+| `docker-compose.yml` | Defines both services: bind mounts for feed/config/ssh, `cache-*` Docker volumes for sdk/repos |
 | `nginx.conf` | Minimal autoindex config for the feed directory |
 | `config.example.yaml` | Example config — copy to `runtime/config.yaml` to use |
 | `builder/config.py` | Loads YAML config, resolves `${ENV_VAR}` syntax, validates targets |
@@ -77,5 +77,5 @@ First run downloads 4 SDKs (~500MB-1GB each), cached in `runtime/sdk/`.
 
 - **Integration test with Docker**: `docker compose build && docker compose up` with a real config — not yet tested end-to-end
 - **SSH keys for private repos**: Mount as Docker secret or volume
-- **OpenWrt version upgrades**: Update `openwrt_version` in config and delete `runtime/sdk/`
+- **OpenWrt version upgrades**: Update `openwrt_version` in config and `docker volume rm` the `cache-sdk` volume
 - **Additional architectures**: Add to `TARGET_ARCH_MAP` in `config.py` and `EABI_TARGETS` in `sdk.py` if ARM
