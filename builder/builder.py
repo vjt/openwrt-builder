@@ -272,6 +272,19 @@ class PackageBuilder:
 
         logger.info("Compiling %s for %s (SDK target: %s)", self.name, target,
                      actual_target)
+
+        # Ensure .config exists so make doesn't launch interactive menuconfig
+        defconfig_cmd = ["make", "defconfig"]
+        if self.sdk_force:
+            defconfig_cmd.append("FORCE=1")
+        if not (sdk_path / ".config").exists():
+            logger.info("Running make defconfig for SDK %s", actual_target)
+            subprocess.run(
+                defconfig_cmd,
+                cwd=str(sdk_path),
+                capture_output=True,
+            )
+
         make_cmd = ["make", f"package/{self.name}/compile", "V=s",
                     f"-j{_nproc()}"]
         if self.sdk_force:
