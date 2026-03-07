@@ -10,6 +10,7 @@ services:
 
   builder:
     build: ./builder
+    platform: linux/amd64
     volumes:
       - ./runtime/feed:/feed
       - ./runtime/sdk:/opt/sdk
