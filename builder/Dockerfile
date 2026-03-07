@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install opkg-utils
-RUN git clone https://git.openwrt.org/project/opkg-utils.git /opt/opkg-utils \
+# Install opkg-utils (upstream git.openwrt.org repo was removed)
+RUN git clone https://github.com/oso/opkg-utils.git /opt/opkg-utils \
     && ln -s /opt/opkg-utils/opkg-make-index /usr/local/bin/opkg-make-index \
     && ln -s /opt/opkg-utils/opkg-build /usr/local/bin/opkg-build
 
