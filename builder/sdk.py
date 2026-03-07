@@ -60,10 +60,15 @@ class SDKManager:
         )
 
         logger.info("Extracting SDK for %s", target)
-        subprocess.run(
+        result = subprocess.run(
             ["tar", "--zstd", "-xf", str(archive), "-C", str(self.cache_dir)],
-            check=True,
         )
+        if result.returncode != 0:
+            # tar warns about "directory renamed" on Docker overlay, but extraction succeeds
+            sdk_path = Path(self.get_sdk_path(target))
+            if not (sdk_path / "Makefile").exists():
+                raise RuntimeError(f"SDK extraction failed for {target}")
+            logger.warning("tar exited with warnings for %s, but SDK looks OK", target)
 
         # Clean up archive
         archive.unlink(missing_ok=True)

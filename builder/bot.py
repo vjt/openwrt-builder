@@ -106,10 +106,7 @@ class OpenwrtBot:
 
         target = args[0]
         await update.message.reply_text(f"Rebuild triggered for: {target}")
-
-        asyncio.get_event_loop().run_in_executor(
-            None, self.rebuild_callback, target
-        )
+        await self.rebuild_callback(target)
 
     async def cmd_logs(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -154,6 +151,24 @@ class OpenwrtBot:
 
     async def notify_recovery(self, repo_name: str):
         await self.notify(f"RECOVERED: {repo_name} is building successfully again.")
+
+    async def notify_build_start(self, repo_name: str, commit: str):
+        await self.notify(f"Building {repo_name} @ {commit[:7]}")
+
+    async def notify_build_success(self, repo_name: str, commit: str, num_ipks: int):
+        await self.notify(f"OK: {repo_name} @ {commit[:7]} — {num_ipks} package(s) built")
+
+    async def notify_clone(self, repo_name: str):
+        await self.notify(f"Cloning {repo_name}...")
+
+    async def notify_skip(self, repo_name: str, commit: str):
+        await self.notify(f"No changes for {repo_name} (at {commit[:7]}), skipping")
+
+    async def notify_cycle_start(self):
+        await self.notify("Starting build cycle")
+
+    async def notify_cycle_done(self, poll_interval: int):
+        await self.notify(f"Build cycle complete, sleeping {poll_interval}s")
 
     def build_application(self) -> Application:
         """Build and return the telegram Application (for running)."""

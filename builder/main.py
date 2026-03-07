@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("openwrt-builder")
 
 
-def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
+async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
                     bot: OpenwrtBot | None = None, force_repo: str | None = None):
     """Run one build cycle across all repos (or a specific one)."""
     repos = config["repos"]
@@ -53,9 +53,13 @@ def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
 
             if not state.has_changed(name, commit) and force_repo is None:
                 logger.info("No changes for %s (at %s), skipping", name, commit[:7])
+                if bot:
+                    await bot.notify_skip(name, commit)
                 continue
 
             logger.info("Building %s (commit %s)", name, commit[:7])
+            if bot:
+                await bot.notify_build_start(name, commit)
             results = pb.build_all_targets()
 
             total_ipks = sum(len(v) for v in results.values())
@@ -69,9 +73,9 @@ def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
             state.record_success(name, commit)
 
             if was_failed and bot:
-                asyncio.get_event_loop().run_until_complete(
-                    bot.notify_recovery(name)
-                )
+                await bot.notify_recovery(name)
+            if bot:
+                await bot.notify_build_success(name, commit, total_ipks)
 
             log_file.write_text(
                 f"Build successful at {datetime.now(timezone.utc).isoformat()}\n"
@@ -110,9 +114,7 @@ def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
             state.record_failure(name, commit, error_msg)
 
             if not already_notified and bot:
-                asyncio.get_event_loop().run_until_complete(
-                    bot.notify_failure(name, error_msg)
-                )
+                await bot.notify_failure(name, error_msg)
 
     if bot:
         bot.last_poll = datetime.now(timezone.utc).isoformat()
@@ -120,8 +122,8 @@ def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
 
 def rebuild_callback_factory(config, state, sdk_mgr, bot):
     """Create a rebuild callback for the Telegram bot."""
-    def rebuild(target: str):
-        run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target)
+    async def rebuild(target: str):
+        await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target)
     return rebuild
 
 
@@ -173,8 +175,12 @@ async def main():
     try:
         while True:
             logger.info("Starting build cycle")
-            run_build_cycle(config, state, sdk_mgr, bot=bot)
+            if bot:
+                await bot.notify_cycle_start()
+            await run_build_cycle(config, state, sdk_mgr, bot=bot)
             logger.info("Build cycle complete, sleeping %d seconds", poll_interval)
+            if bot:
+                await bot.notify_cycle_done(poll_interval)
             await asyncio.sleep(poll_interval)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down")

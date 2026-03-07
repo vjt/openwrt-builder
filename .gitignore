@@ -4,4 +4,5 @@ packages/
 __pycache__/
 *.pyc
 .claude
+.venv/
 runtime/

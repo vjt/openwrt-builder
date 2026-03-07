@@ -41,15 +41,14 @@ Note: There is no separate `mediatek/mt7981` subtarget in OpenWrt 24.10.0 — MT
 ### Running Tests
 
 ```bash
-cd builder && /usr/bin/python3 -m pytest tests/ -v
+cd builder && ../.venv/bin/python3 -m pytest tests/ -v
 ```
-
-Note: On this machine, `/usr/local/bin/python3` resolves to an internal fbcode Python that doesn't have pytest. Use `/usr/bin/python3` (system Python 3.9.6) which has pytest and pyyaml installed via `--user`.
 
 ### Dependencies (local dev)
 
 ```bash
-/usr/bin/python3 -m pip install --user pytest pyyaml python-telegram-bot
+python3 -m venv .venv
+.venv/bin/pip install pytest pyyaml python-telegram-bot
 ```
 
 ### Test Structure
