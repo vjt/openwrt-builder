@@ -149,6 +149,14 @@ async def main():
     for target in unique_targets:
         sdk_mgr.ensure_downloaded(target)
 
+    # Ensure at least one SDK is available for arch-independent builds
+    if not unique_targets and all(
+        sdk_mgr.needs_download(t) for t in TARGET_ARCH_MAP
+    ):
+        first_target = next(iter(TARGET_ARCH_MAP))
+        logger.info("Downloading %s SDK for arch-independent builds", first_target)
+        sdk_mgr.ensure_downloaded(first_target)
+
     tg_config = config.get("telegram", {})
     bot = None
     if tg_config.get("bot_token") and tg_config.get("chat_id"):

@@ -16,6 +16,15 @@ def _collect_ipk_files(bin_dir: str) -> list[Path]:
     return list(Path(bin_dir).rglob("*.ipk"))
 
 
+def _is_openwrt_makefile(path: Path) -> bool:
+    """Check if a Makefile is an OpenWrt package Makefile."""
+    try:
+        content = path.read_text()
+        return "include $(INCLUDE_DIR)/package.mk" in content
+    except Exception:
+        return False
+
+
 def reindex_feed(feed_arch_dir: str):
     """Regenerate Packages and Packages.gz in a feed architecture directory."""
     logger.info("Reindexing %s", feed_arch_dir)
@@ -142,56 +151,125 @@ class PackageBuilder:
 
     def build_for_target(self, target: str) -> list[Path]:
         """Build the package for a specific target. Returns list of .ipk paths."""
+        method, makefile_dir = self._detect_build_method()
+
+        if method == "skip":
+            logger.warning(
+                "No recognized build method for %s (no OpenWrt Makefile, "
+                "no build-ipk.sh, no CONTROL/). Skipping.",
+                self.name,
+            )
+            return []
+
+        if method == "script":
+            return self._build_with_script(target)
+
+        if method == "opkg-build":
+            return self._build_with_opkg(target)
+
+        # method == "sdk"
+        return self._build_with_sdk(target, makefile_dir=makefile_dir)
+
+    def _detect_build_method(self) -> tuple[str, Path | None]:
+        """Detect how to build this repo based on its contents.
+
+        Returns (method, makefile_dir) where method is one of:
+          "sdk", "script", "opkg-build", "skip"
+        """
+        for candidate in [self.repo_dir / "Makefile",
+                          self.repo_dir / "openwrt" / "Makefile"]:
+            if candidate.exists() and _is_openwrt_makefile(candidate):
+                return ("sdk", candidate.parent)
+
+        if (self.repo_dir / "build-ipk.sh").exists():
+            return ("script", None)
+
+        if (self.repo_dir / "CONTROL").is_dir():
+            return ("opkg-build", None)
+
+        return ("skip", None)
+
+    def _get_arch_dir(self, target: str) -> Path:
+        """Return the feed directory for a target."""
         if target == "all":
-            return self._build_arch_independent()
-        return self._build_with_sdk(target)
+            return self.feed_dir / "all"
+        return self.feed_dir / TARGET_ARCH_MAP[target]
 
-    def _build_arch_independent(self) -> list[Path]:
-        """Build an architecture-independent package using opkg-build."""
-        arch_dir = self.feed_dir / "all"
-        arch_dir.mkdir(parents=True, exist_ok=True)
-
-        build_script = self.repo_dir / "build-ipk.sh"
-        if build_script.exists():
-            logger.info("Running build-ipk.sh for %s", self.name)
-            subprocess.run(
-                ["bash", str(build_script)],
-                cwd=str(self.repo_dir),
-                check=True,
-            )
-        else:
-            logger.info("Running opkg-build for %s", self.name)
-            subprocess.run(
-                ["opkg-build", str(self.repo_dir)],
-                cwd=str(arch_dir),
-                check=True,
-            )
-
-        ipks = _collect_ipk_files(str(self.repo_dir))
+    def _collect_and_copy(self, search_dir: Path, dest_dir: Path,
+                          name_filter: str | None = None) -> list[Path]:
+        """Find .ipk files under search_dir and copy them to dest_dir."""
+        ipks = _collect_ipk_files(str(search_dir))
         copied = []
         for ipk in ipks:
-            dest = arch_dir / ipk.name
+            if name_filter and name_filter not in ipk.name:
+                continue
+            dest = dest_dir / ipk.name
             shutil.copy2(str(ipk), str(dest))
             copied.append(dest)
-            logger.info("Copied %s to %s", ipk.name, arch_dir)
-
+            logger.info("Copied %s to %s", ipk.name, dest_dir)
         return copied
 
-    def _build_with_sdk(self, target: str) -> list[Path]:
-        """Build the package using the OpenWrt SDK for the given target."""
-        arch = TARGET_ARCH_MAP[target]
-        arch_dir = self.feed_dir / arch
+    def _build_with_script(self, target: str) -> list[Path]:
+        """Build using the repo's build-ipk.sh script."""
+        arch_dir = self._get_arch_dir(target)
         arch_dir.mkdir(parents=True, exist_ok=True)
 
-        self.sdk_manager.ensure_downloaded(target)
-        sdk_path = Path(self.sdk_manager.get_sdk_path(target))
+        logger.info("Running build-ipk.sh for %s", self.name)
+        subprocess.run(
+            ["bash", str(self.repo_dir / "build-ipk.sh")],
+            cwd=str(self.repo_dir),
+            check=True,
+        )
+
+        return self._collect_and_copy(self.repo_dir, arch_dir)
+
+    def _build_with_opkg(self, target: str) -> list[Path]:
+        """Build using opkg-build (expects CONTROL/ directory)."""
+        arch_dir = self._get_arch_dir(target)
+        arch_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Running opkg-build for %s", self.name)
+        subprocess.run(
+            ["opkg-build", str(self.repo_dir)],
+            cwd=str(arch_dir),
+            check=True,
+        )
+
+        return self._collect_and_copy(self.repo_dir, arch_dir)
+
+    def _pick_any_sdk_target(self) -> str:
+        """Pick any available SDK target for arch-independent builds."""
+        for target in TARGET_ARCH_MAP:
+            if not self.sdk_manager.needs_download(target):
+                logger.info("Using cached SDK %s for arch-independent build", target)
+                return target
+        first_target = next(iter(TARGET_ARCH_MAP))
+        logger.info("No cached SDK, will download %s for arch-independent build",
+                     first_target)
+        return first_target
+
+    def _build_with_sdk(self, target: str,
+                        makefile_dir: Path | None = None) -> list[Path]:
+        """Build the package using the OpenWrt SDK."""
+        arch_dir = self._get_arch_dir(target)
+        arch_dir.mkdir(parents=True, exist_ok=True)
+
+        actual_target = target
+        if target == "all":
+            actual_target = self._pick_any_sdk_target()
+
+        self.sdk_manager.ensure_downloaded(actual_target)
+        sdk_path = Path(self.sdk_manager.get_sdk_path(actual_target))
+
+        source_dir = makefile_dir if makefile_dir else self.repo_dir
 
         sdk_pkg_dir = sdk_path / "package" / self.name
         if sdk_pkg_dir.exists() or sdk_pkg_dir.is_symlink():
             sdk_pkg_dir.unlink() if sdk_pkg_dir.is_symlink() else shutil.rmtree(str(sdk_pkg_dir))
-        sdk_pkg_dir.symlink_to(self.repo_dir)
+        sdk_pkg_dir.symlink_to(source_dir)
 
-        logger.info("Compiling %s for %s (arch: %s)", self.name, target, arch)
+        logger.info("Compiling %s for %s (SDK target: %s)", self.name, target,
+                     actual_target)
         subprocess.run(
             ["make", f"package/{self.name}/compile", "V=s",
              f"-j{_nproc()}"],
@@ -200,16 +278,9 @@ class PackageBuilder:
             capture_output=True,
         )
 
-        ipks = _collect_ipk_files(str(sdk_path / "bin"))
-        copied = []
-        for ipk in ipks:
-            if self.name in ipk.name:
-                dest = arch_dir / ipk.name
-                shutil.copy2(str(ipk), str(dest))
-                copied.append(dest)
-                logger.info("Copied %s to %s", ipk.name, arch_dir)
-
-        return copied
+        return self._collect_and_copy(
+            sdk_path / "bin", arch_dir, name_filter=self.name
+        )
 
     def build_all_targets(self) -> dict[str, list[Path]]:
         """Build for all configured targets. Returns {target: [ipk_paths]}."""
@@ -219,10 +290,7 @@ class PackageBuilder:
         for target in self.targets:
             ipks = self.build_for_target(target)
             results[target] = ipks
-            if target == "all":
-                modified_dirs.add(str(self.feed_dir / "all"))
-            else:
-                modified_dirs.add(str(self.feed_dir / TARGET_ARCH_MAP[target]))
+            modified_dirs.add(str(self._get_arch_dir(target)))
 
         for d in modified_dirs:
             reindex_feed(d)
