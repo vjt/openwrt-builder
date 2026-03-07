@@ -112,6 +112,7 @@ class PackageBuilder:
         repo_cache_dir: str,
         feed_dir: str,
         sdk_manager: SDKManager,
+        sdk_force: bool = False,
     ):
         self.name = repo_config["name"]
         self.url = repo_config["url"]
@@ -120,6 +121,7 @@ class PackageBuilder:
         self.repo_dir = Path(repo_cache_dir) / self.name
         self.feed_dir = Path(feed_dir)
         self.sdk_manager = sdk_manager
+        self.sdk_force = sdk_force
 
     def clone_or_fetch(self):
         """Clone the repo if new, or fetch latest changes."""
@@ -270,9 +272,12 @@ class PackageBuilder:
 
         logger.info("Compiling %s for %s (SDK target: %s)", self.name, target,
                      actual_target)
+        make_cmd = ["make", f"package/{self.name}/compile", "V=s",
+                    f"-j{_nproc()}"]
+        if self.sdk_force:
+            make_cmd.append("FORCE=1")
         subprocess.run(
-            ["make", f"package/{self.name}/compile", "V=s",
-             f"-j{_nproc()}"],
+            make_cmd,
             cwd=str(sdk_path),
             check=True,
             capture_output=True,

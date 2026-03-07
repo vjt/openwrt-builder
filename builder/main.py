@@ -46,6 +46,7 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
                 repo_cache_dir=REPO_CACHE_DIR,
                 feed_dir=FEED_DIR,
                 sdk_manager=sdk_mgr,
+                sdk_force=config.get("sdk_force", False),
             )
 
             pb.clone_or_fetch()

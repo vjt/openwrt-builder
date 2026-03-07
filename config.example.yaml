@@ -7,6 +7,7 @@ default_targets:
   - ath79/tiny
 
 poll_interval: 3600  # seconds
+sdk_force: false     # set true on case-insensitive filesystems (macOS)
 
 telegram:
   bot_token: "${TELEGRAM_BOT_TOKEN}"
