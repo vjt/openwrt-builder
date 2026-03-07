@@ -37,4 +37,5 @@ COPY tests/ ./tests/
 RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs /root/.ssh \
     && printf "StrictHostKeyChecking no\nIdentityFile /root/.ssh/builder.key\n" > /root/.ssh/config
 
-CMD ["python3", "main.py"]
+# Fix SSH key permissions at startup (bind mounts inherit host perms)
+CMD ["sh", "-c", "test -f /root/.ssh/builder.key && chmod 600 /root/.ssh/builder.key; exec python3 main.py"]

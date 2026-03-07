@@ -276,12 +276,18 @@ class PackageBuilder:
                     f"-j{_nproc()}"]
         if self.sdk_force:
             make_cmd.append("FORCE=1")
-        subprocess.run(
+        result = subprocess.run(
             make_cmd,
             cwd=str(sdk_path),
-            check=True,
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            # Log the last 20 lines of stderr for debugging
+            stderr_tail = "\n".join(result.stderr.splitlines()[-20:])
+            raise RuntimeError(
+                f"SDK build failed for {self.name}:\n{stderr_tail}"
+            )
 
         return self._collect_and_copy(
             sdk_path / "bin", arch_dir, name_filter=self.name
