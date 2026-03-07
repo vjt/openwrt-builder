@@ -35,7 +35,6 @@ COPY tests/ ./tests/
 
 # Create directories and configure SSH for private repos
 RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs /root/.ssh \
-    && printf "StrictHostKeyChecking no\nIdentityFile /root/.ssh/id\n" > /root/.ssh/config
+    && printf "StrictHostKeyChecking no\nIdentityFile /root/.ssh/builder.key\n" > /root/.ssh/config
 
-# Fix SSH key permissions at startup (bind mounts inherit host perms, and :ro prevents chmod)
-CMD ["sh", "-c", "if [ -f /root/.ssh/builder.key ]; then cp /root/.ssh/builder.key /root/.ssh/id && chmod 600 /root/.ssh/id; fi; exec python3 main.py"]
+CMD ["python3", "main.py"]
