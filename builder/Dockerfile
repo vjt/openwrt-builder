@@ -35,6 +35,6 @@ COPY tests/ ./tests/
 
 # Create directories and configure SSH for private repos
 RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs /root/.ssh \
-    && printf "StrictHostKeyChecking no\nIdentityFile /root/.ssh/keys/id_ed25519\n" > /root/.ssh/config
+    && printf "StrictHostKeyChecking no\nIdentityFile /root/.ssh/builder.key\n" > /root/.ssh/config
 
 CMD ["python3", "main.py"]
