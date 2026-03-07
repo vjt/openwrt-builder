@@ -14,6 +14,7 @@ services:
       - ./runtime/feed:/feed
       - ./runtime/sdk:/opt/sdk
       - ./runtime/repos:/opt/repos
+      - ./runtime/ssh:/root/.ssh/keys:ro
       - ./runtime/config.yaml:/etc/openwrt-builder/config.yaml:ro
     environment:
       - TELEGRAM_BOT_TOKEN
