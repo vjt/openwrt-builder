@@ -18,6 +18,7 @@ services:
       - ./runtime/ssh.key:/root/.ssh/builder.key:ro
       - ./runtime/config.yaml:/etc/openwrt-builder/config.yaml:ro
     environment:
+      - TERM=xterm
       - TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID
     restart: unless-stopped

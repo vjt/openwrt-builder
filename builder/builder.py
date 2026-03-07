@@ -283,7 +283,7 @@ class PackageBuilder:
             text=True,
         )
         if result.returncode != 0:
-            # Combine stdout+stderr and filter out make cascade noise
+            # Combine stdout+stderr and filter out noise
             all_output = (result.stdout or "") + (result.stderr or "")
             error_lines = [
                 line for line in all_output.splitlines()
@@ -291,6 +291,8 @@ class PackageBuilder:
                 and not line.startswith("make[")
                 and not line.startswith("make:")
                 and not line.startswith("Checking ")
+                and not line.startswith("WARNING:")
+                and "warning:" not in line
             ]
             stderr_tail = "\n".join(error_lines[-30:])
             raise RuntimeError(
