@@ -2,7 +2,7 @@ services:
   feed-server:
     image: nginx:alpine
     volumes:
-      - feed-data:/feed:ro
+      - ./runtime/feed:/feed:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8080:80"
@@ -11,16 +11,11 @@ services:
   builder:
     build: ./builder
     volumes:
-      - feed-data:/feed
-      - sdk-cache:/opt/sdk
-      - repo-cache:/opt/repos
-      - ./config.yaml:/etc/openwrt-builder/config.yaml:ro
+      - ./runtime/feed:/feed
+      - ./runtime/sdk:/opt/sdk
+      - ./runtime/repos:/opt/repos
+      - ./runtime/config.yaml:/etc/openwrt-builder/config.yaml:ro
     environment:
       - TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID
     restart: unless-stopped
-
-volumes:
-  feed-data:
-  sdk-cache:
-  repo-cache:

@@ -6,7 +6,7 @@ Docker-based system that polls git repos and automatically rebuilds OpenWrt pack
 
 ## Architecture
 
-Two Docker containers sharing a `feed-data` volume:
+Two Docker containers sharing a `runtime/` directory:
 - **feed-server**: `nginx:alpine`, read-only mount on `/feed/`, serves packages on port 8080
 - **builder**: Debian-based, runs Python app that combines a Telegram bot (long-polling) with a periodic build loop
 
@@ -14,9 +14,9 @@ Two Docker containers sharing a `feed-data` volume:
 
 | File | Purpose |
 |---|---|
-| `docker-compose.yml` | Defines both services + 3 volumes (feed-data, sdk-cache, repo-cache) |
+| `docker-compose.yml` | Defines both services + `runtime/` bind mounts (feed, sdk, repos) |
 | `nginx.conf` | Minimal autoindex config for the feed directory |
-| `config.example.yaml` | Example config — copy to `config.yaml` to use |
+| `config.example.yaml` | Example config — copy to `runtime/config.yaml` to use |
 | `builder/config.py` | Loads YAML config, resolves `${ENV_VAR}` syntax, validates targets |
 | `builder/state.py` | JSON state persistence — tracks commits, build status, notification flags |
 | `builder/sdk.py` | Downloads/caches OpenWrt SDKs per architecture target |
@@ -62,12 +62,12 @@ Note: On this machine, `/usr/local/bin/python3` resolves to an internal fbcode P
 
 ### Deploying
 
-1. Copy `config.example.yaml` to `config.yaml`, fill in repo URLs
+1. Copy `config.example.yaml` to `runtime/config.yaml`, fill in repo URLs
 2. Create `.env` with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 3. `docker compose build && docker compose up -d`
 4. On each OpenWrt AP: `echo "src/gz custom http://<server>:8080/<arch>" >> /etc/opkg/customfeeds.conf`
 
-First run downloads 4 SDKs (~500MB-1GB each), cached in a named volume.
+First run downloads 4 SDKs (~500MB-1GB each), cached in `runtime/sdk/`.
 
 ## Design Documents
 
@@ -78,5 +78,5 @@ First run downloads 4 SDKs (~500MB-1GB each), cached in a named volume.
 
 - **Integration test with Docker**: `docker compose build && docker compose up` with a real config — not yet tested end-to-end
 - **SSH keys for private repos**: Mount as Docker secret or volume
-- **OpenWrt version upgrades**: Update `openwrt_version` in config and delete the `sdk-cache` volume
+- **OpenWrt version upgrades**: Update `openwrt_version` in config and delete `runtime/sdk/`
 - **Additional architectures**: Add to `TARGET_ARCH_MAP` in `config.py` and `EABI_TARGETS` in `sdk.py` if ARM
