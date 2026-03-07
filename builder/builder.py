@@ -313,7 +313,7 @@ class PackageBuilder:
             )
 
         return self._collect_and_copy(
-            sdk_path / "bin", arch_dir, name_filter=self.name
+            sdk_path / "bin" / "packages", arch_dir
         )
 
     def build_all_targets(self) -> dict[str, list[Path]]:
