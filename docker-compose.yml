@@ -16,6 +16,7 @@ services:
       - cache-repos:/opt/repos
       - ./runtime/ssh.key:/root/.ssh/builder.key:ro
       - ./runtime/config.yaml:/etc/openwrt-builder/config.yaml:ro
+      - ./runtime/hetzner.token:/etc/openwrt-builder/hetzner.token:ro
     environment:
       - TERM=xterm
       - TELEGRAM_BOT_TOKEN

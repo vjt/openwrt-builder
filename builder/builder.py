@@ -113,6 +113,7 @@ class PackageBuilder:
         feed_dir: str,
         sdk_manager: SDKManager,
         sdk_force: bool = False,
+        remote_builder=None,
     ):
         self.name = repo_config["name"]
         self.url = repo_config["url"]
@@ -122,6 +123,7 @@ class PackageBuilder:
         self.feed_dir = Path(feed_dir)
         self.sdk_manager = sdk_manager
         self.sdk_force = sdk_force
+        self.remote_builder = remote_builder
 
     def clone_or_fetch(self):
         """Clone the repo if new, or fetch latest changes."""
@@ -170,6 +172,8 @@ class PackageBuilder:
             return self._build_with_opkg(target)
 
         # method == "sdk"
+        if self.remote_builder:
+            return self._build_remote(target, makefile_dir=makefile_dir)
         return self._build_with_sdk(target, makefile_dir=makefile_dir)
 
     def _detect_build_method(self) -> tuple[str, Path | None]:
@@ -249,6 +253,31 @@ class PackageBuilder:
         logger.info("No cached SDK, will download %s for arch-independent build",
                      first_target)
         return first_target
+
+    def _build_remote(self, target: str,
+                       makefile_dir: Path | None = None) -> list[Path]:
+        """Build the package on a remote Hetzner instance via SSH."""
+        arch_dir = self._get_arch_dir(target)
+        arch_dir.mkdir(parents=True, exist_ok=True)
+
+        self.remote_builder.ensure_server()
+
+        # Sync the local clone to the remote server
+        self.remote_builder.sync_repo(str(self.repo_dir), self.name)
+
+        # Determine makefile subdir relative to repo root (e.g., "openwrt")
+        makefile_subdir = None
+        if makefile_dir and makefile_dir != self.repo_dir:
+            makefile_subdir = str(makefile_dir.relative_to(self.repo_dir))
+
+        remote_ipks = self.remote_builder.build_package(
+            name=self.name,
+            makefile_subdir=makefile_subdir,
+            target=target,
+            sdk_force=self.sdk_force,
+        )
+
+        return self.remote_builder.download_ipks(remote_ipks, str(arch_dir))
 
     def _build_with_sdk(self, target: str,
                         makefile_dir: Path | None = None) -> list[Path]:

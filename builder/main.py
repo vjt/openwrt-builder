@@ -10,6 +10,7 @@ from state import StateManager
 from sdk import SDKManager
 from builder import PackageBuilder, reindex_feed
 from bot import OpenwrtBot
+from remote import RemoteBuilder
 
 CONFIG_PATH = "/etc/openwrt-builder/config.yaml"
 FEED_DIR = "/feed"
@@ -17,6 +18,8 @@ SDK_CACHE_DIR = "/opt/sdk"
 REPO_CACHE_DIR = "/opt/repos"
 STATE_FILE = "/feed/.builder-state.json"
 LOG_DIR = "/tmp/build-logs"
+
+HETZNER_TOKEN_PATH = "/etc/openwrt-builder/hetzner.token"
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -27,7 +30,8 @@ logger = logging.getLogger("openwrt-builder")
 
 
 async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
-                    bot: OpenwrtBot | None = None, force_repo: str | None = None):
+                    bot: OpenwrtBot | None = None, force_repo: str | None = None,
+                    remote_builder: RemoteBuilder | None = None):
     """Run one build cycle across all repos (or a specific one)."""
     repos = config["repos"]
     if force_repo and force_repo != "all":
@@ -48,6 +52,7 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
                 feed_dir=FEED_DIR,
                 sdk_manager=sdk_mgr,
                 sdk_force=config.get("sdk_force", False),
+                remote_builder=remote_builder,
             )
 
             pb.clone_or_fetch()
@@ -123,10 +128,19 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
         bot.last_poll = datetime.now(timezone.utc).isoformat()
 
 
-def rebuild_callback_factory(config, state, sdk_mgr, bot):
+def rebuild_callback_factory(config, state, sdk_mgr, bot, remote_builder=None):
     """Create a rebuild callback for the Telegram bot."""
     async def rebuild(target: str):
-        await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target)
+        await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target,
+                              remote_builder=remote_builder)
+        # Destroy remote server after manual rebuild too
+        if remote_builder:
+            if bot:
+                await bot.notify_server_destroy()
+            try:
+                remote_builder.destroy_server()
+            except Exception as e:
+                logger.warning("Failed to destroy build server: %s", e)
     return rebuild
 
 
@@ -145,20 +159,43 @@ async def main():
             (Path(FEED_DIR) / arch).mkdir(parents=True, exist_ok=True)
     (Path(FEED_DIR) / "all").mkdir(parents=True, exist_ok=True)
 
-    logger.info("Ensuring SDKs are downloaded...")
-    unique_targets = [
-        t for t in config["default_targets"] if t != "all"
-    ]
-    for target in unique_targets:
-        sdk_mgr.ensure_downloaded(target)
+    # Set up remote builder if Hetzner is configured
+    remote_builder = None
+    hetzner_config = config.get("hetzner", {})
+    if hetzner_config and Path(HETZNER_TOKEN_PATH).exists():
+        api_token = Path(HETZNER_TOKEN_PATH).read_text().strip()
+        if api_token:
+            remote_builder = RemoteBuilder(
+                api_token=api_token,
+                ssh_key_name=hetzner_config.get("ssh_key_name", "openwrt-builder"),
+                server_type=hetzner_config.get("server_type", "cx22"),
+                location=hetzner_config.get("location", "fsn1"),
+                openwrt_version=config["openwrt_version"],
+            )
+            logger.info("Hetzner remote builder configured (%s in %s)",
+                         remote_builder.server_type, remote_builder.location)
+        else:
+            logger.warning("Hetzner token file is empty, using local builds")
+    elif hetzner_config:
+        logger.warning("Hetzner config present but no token file at %s",
+                        HETZNER_TOKEN_PATH)
 
-    # Ensure at least one SDK is available for arch-independent builds
-    if not unique_targets and all(
-        sdk_mgr.needs_download(t) for t in TARGET_ARCH_MAP
-    ):
-        first_target = next(iter(TARGET_ARCH_MAP))
-        logger.info("Downloading %s SDK for arch-independent builds", first_target)
-        sdk_mgr.ensure_downloaded(first_target)
+    # Only download SDKs locally if not using remote builder
+    if not remote_builder:
+        logger.info("Ensuring SDKs are downloaded...")
+        unique_targets = [
+            t for t in config["default_targets"] if t != "all"
+        ]
+        for target in unique_targets:
+            sdk_mgr.ensure_downloaded(target)
+
+        # Ensure at least one SDK is available for arch-independent builds
+        if not unique_targets and all(
+            sdk_mgr.needs_download(t) for t in TARGET_ARCH_MAP
+        ):
+            first_target = next(iter(TARGET_ARCH_MAP))
+            logger.info("Downloading %s SDK for arch-independent builds", first_target)
+            sdk_mgr.ensure_downloaded(first_target)
 
     tg_config = config.get("telegram", {})
     bot = None
@@ -168,10 +205,14 @@ async def main():
             chat_id=tg_config["chat_id"],
             state_manager=state,
             repos_config=config["repos"],
-            rebuild_callback=rebuild_callback_factory(config, state, sdk_mgr, None),
+            rebuild_callback=rebuild_callback_factory(
+                config, state, sdk_mgr, None, remote_builder),
             log_dir=LOG_DIR,
         )
-        bot.rebuild_callback = rebuild_callback_factory(config, state, sdk_mgr, bot)
+        bot.rebuild_callback = rebuild_callback_factory(
+            config, state, sdk_mgr, bot, remote_builder)
+        if remote_builder:
+            remote_builder.bot = bot
 
         app = bot.build_application()
 
@@ -188,13 +229,31 @@ async def main():
             logger.info("Starting build cycle")
             if bot:
                 await bot.notify_cycle_start()
-            await run_build_cycle(config, state, sdk_mgr, bot=bot)
+
+            await run_build_cycle(config, state, sdk_mgr, bot=bot,
+                                  remote_builder=remote_builder)
+
+            # Destroy remote server after each build cycle to save costs
+            if remote_builder:
+                if bot:
+                    await bot.notify_server_destroy()
+                try:
+                    remote_builder.destroy_server()
+                except Exception as e:
+                    logger.warning("Failed to destroy build server: %s", e)
+
             logger.info("Build cycle complete, sleeping %d seconds", poll_interval)
             if bot:
                 await bot.notify_cycle_done(poll_interval)
             await asyncio.sleep(poll_interval)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down")
+        # Clean up remote server on shutdown
+        if remote_builder:
+            try:
+                remote_builder.destroy_server()
+            except Exception:
+                pass
         if bot and bot.app:
             await bot.app.updater.stop()
             await bot.app.stop()

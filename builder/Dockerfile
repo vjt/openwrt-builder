@@ -21,6 +21,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-user-static \
     && rm -rf /var/lib/apt/lists/*
 
+# Install hcloud CLI for Hetzner remote builds
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget -q -O /tmp/hcloud.tar.gz \
+    "https://github.com/hetznercloud/cli/releases/latest/download/hcloud-linux-${ARCH}.tar.gz" && \
+    tar xzf /tmp/hcloud.tar.gz -C /usr/local/bin hcloud && \
+    rm /tmp/hcloud.tar.gz
+
 WORKDIR /app
 
 COPY requirements.txt .

@@ -9,6 +9,13 @@ default_targets:
 poll_interval: 3600  # seconds
 sdk_force: false     # set true on case-insensitive filesystems (macOS)
 
+# Hetzner on-demand build servers (optional, for ARM hosts that can't run x86_64 SDK)
+# Requires: runtime/hetzner.token with API token, SSH key registered in Hetzner console
+# hetzner:
+#   ssh_key_name: "openwrt-builder"  # name of SSH key in Hetzner Cloud
+#   server_type: "cx23"               # 2 vCPU, 4GB RAM, cheapest x86 shared
+#   location: "fsn1"                 # Falkenstein datacenter
+
 telegram:
   bot_token: "${TELEGRAM_BOT_TOKEN}"
   chat_id: "${TELEGRAM_CHAT_ID}"
