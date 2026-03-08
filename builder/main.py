@@ -164,9 +164,9 @@ async def main():
             (Path(FEED_DIR) / arch).mkdir(parents=True, exist_ok=True)
     (Path(FEED_DIR) / "all").mkdir(parents=True, exist_ok=True)
 
-    # Generate signing keypair if it doesn't exist
+    # Generate signing keypair if it doesn't exist (or is empty from docker bind mount)
     signing_key = None
-    if not Path(SIGNING_KEY).exists():
+    if not Path(SIGNING_KEY).exists() or Path(SIGNING_KEY).stat().st_size == 0:
         logger.info("Generating feed signing keypair")
         subprocess.run(
             ["usign", "-G", "-s", SIGNING_KEY, "-p", SIGNING_PUB,
