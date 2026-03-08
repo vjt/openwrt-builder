@@ -11,7 +11,7 @@ def builder():
     return RemoteBuilder(
         api_token="test-token-123",
         ssh_key_name="openwrt-builder",
-        ssh_key_path="/root/.ssh/builder.key",
+        ssh_key_path="/runtime/ssh.key",
         server_type="cx22",
         location="fsn1",
         openwrt_version="24.10.0",
@@ -109,7 +109,7 @@ class TestSSH:
             cmd = mock_run.call_args[0][0]
             assert cmd[0] == "ssh"
             assert "-i" in cmd
-            assert "/root/.ssh/builder.key" in cmd
+            assert "/runtime/ssh.key" in cmd
             assert "root@1.2.3.4" in cmd
             assert "echo" in cmd
             assert "hello" in cmd

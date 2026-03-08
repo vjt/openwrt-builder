@@ -13,16 +13,16 @@ from builder import PackageBuilder, reindex_feed
 from bot import OpenwrtBot
 from remote import RemoteBuilder
 
-CONFIG_PATH = "/etc/openwrt-builder/config.yaml"
+CONFIG_PATH = "/runtime/config.yaml"
 FEED_DIR = "/feed"
 SDK_CACHE_DIR = "/opt/sdk"
 REPO_CACHE_DIR = "/opt/repos"
 STATE_FILE = "/feed/.builder-state.json"
 LOG_DIR = "/tmp/build-logs"
 
-HETZNER_TOKEN_PATH = "/etc/openwrt-builder/hetzner.token"
-SIGNING_KEY = "/etc/openwrt-builder/feed-signing.key"
-SIGNING_PUB = "/etc/openwrt-builder/feed-signing.pub"
+HETZNER_TOKEN_PATH = "/runtime/hetzner.token"
+SIGNING_KEY = "/runtime/feed-signing.key"
+SIGNING_PUB = "/runtime/feed-signing.pub"
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -164,9 +164,9 @@ async def main():
             (Path(FEED_DIR) / arch).mkdir(parents=True, exist_ok=True)
     (Path(FEED_DIR) / "all").mkdir(parents=True, exist_ok=True)
 
-    # Generate signing keypair if it doesn't exist (or is empty from docker bind mount)
+    # Generate signing keypair if it doesn't exist
     signing_key = None
-    if not Path(SIGNING_KEY).exists() or Path(SIGNING_KEY).stat().st_size == 0:
+    if not Path(SIGNING_KEY).exists():
         logger.info("Generating feed signing keypair")
         subprocess.run(
             ["usign", "-G", "-s", SIGNING_KEY, "-p", SIGNING_PUB,

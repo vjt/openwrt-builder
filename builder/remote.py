@@ -38,7 +38,7 @@ class RemoteBuilder:
         self,
         api_token: str,
         ssh_key_name: str,
-        ssh_key_path: str = "/root/.ssh/builder.key",
+        ssh_key_path: str = "/runtime/ssh.key",
         server_type: str = "cx23",
         location: str = "fsn1",
         openwrt_version: str = "24.10.0",

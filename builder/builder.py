@@ -52,10 +52,10 @@ def reindex_feed(feed_arch_dir: str):
 def sign_feed(feed_arch_dir: str, signing_key: str):
     """Sign the Packages file with usign, producing Packages.sig."""
     packages_file = Path(feed_arch_dir) / "Packages"
-    if not packages_file.exists() or packages_file.stat().st_size == 0:
+    if not packages_file.exists():
         return
-    if not Path(signing_key).exists() or Path(signing_key).stat().st_size == 0:
-        logger.warning("Signing key %s missing or empty, skipping feed signing", signing_key)
+    if not Path(signing_key).exists():
+        logger.warning("Signing key %s not found, skipping feed signing", signing_key)
         return
     logger.info("Signing %s", packages_file)
     subprocess.run(
