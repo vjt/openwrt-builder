@@ -270,6 +270,11 @@ class PackageBuilder:
             sdk_pkg_dir.unlink() if sdk_pkg_dir.is_symlink() else shutil.rmtree(str(sdk_pkg_dir))
         sdk_pkg_dir.symlink_to(source_dir)
 
+        # Clean previous build output so we only collect this package's ipks
+        bin_packages = sdk_path / "bin" / "packages"
+        if bin_packages.exists():
+            shutil.rmtree(str(bin_packages))
+
         logger.info("Compiling %s for %s (SDK target: %s)", self.name, target,
                      actual_target)
 
