@@ -18,12 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     ca-certificates \
     openssh-client \
+    qemu-user-static \
     && rm -rf /var/lib/apt/lists/*
-
-# Install opkg-utils from upstream
-RUN git clone https://git.yoctoproject.org/opkg-utils /opt/opkg-utils \
-    && ln -s /opt/opkg-utils/opkg-make-index /usr/local/bin/opkg-make-index \
-    && ln -s /opt/opkg-utils/opkg-build /usr/local/bin/opkg-build
 
 WORKDIR /app
 
