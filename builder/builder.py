@@ -49,6 +49,21 @@ def reindex_feed(feed_arch_dir: str):
         _manual_reindex(feed_path)
 
 
+def sign_feed(feed_arch_dir: str, signing_key: str):
+    """Sign the Packages file with usign, producing Packages.sig."""
+    packages_file = Path(feed_arch_dir) / "Packages"
+    if not packages_file.exists():
+        return
+    if not Path(signing_key).exists():
+        logger.warning("Signing key %s not found, skipping feed signing", signing_key)
+        return
+    logger.info("Signing %s", packages_file)
+    subprocess.run(
+        ["usign", "-S", "-m", str(packages_file), "-s", signing_key],
+        check=True,
+    )
+
+
 def _manual_reindex(feed_path: Path):
     """Generate Packages index manually by extracting control files from .ipk."""
     logger.info("Using manual reindex for %s", feed_path)
@@ -115,6 +130,7 @@ class PackageBuilder:
         sdk_force: bool = False,
         remote_builder=None,
         bot=None,
+        signing_key: str | None = None,
     ):
         self.name = repo_config["name"]
         self.url = repo_config["url"]
@@ -126,6 +142,7 @@ class PackageBuilder:
         self.sdk_force = sdk_force
         self.remote_builder = remote_builder
         self.bot = bot
+        self.signing_key = signing_key
 
     def clone_or_fetch(self):
         """Clone the repo if new, or fetch latest changes."""
@@ -372,6 +389,8 @@ class PackageBuilder:
 
         for d in modified_dirs:
             reindex_feed(d)
+            if self.signing_key:
+                sign_feed(d, self.signing_key)
 
         return results
 

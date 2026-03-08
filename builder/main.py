@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,8 @@ STATE_FILE = "/feed/.builder-state.json"
 LOG_DIR = "/tmp/build-logs"
 
 HETZNER_TOKEN_PATH = "/etc/openwrt-builder/hetzner.token"
+SIGNING_KEY = "/etc/openwrt-builder/feed-signing.key"
+SIGNING_PUB = "/etc/openwrt-builder/feed-signing.pub"
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -31,7 +34,8 @@ logger = logging.getLogger("openwrt-builder")
 
 async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
                     bot: OpenwrtBot | None = None, force_repo: str | None = None,
-                    remote_builder: RemoteBuilder | None = None):
+                    remote_builder: RemoteBuilder | None = None,
+                    signing_key: str | None = None):
     """Run one build cycle across all repos (or a specific one)."""
     repos = config["repos"]
     if force_repo and force_repo != "all":
@@ -54,6 +58,7 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
                 sdk_force=config.get("sdk_force", False),
                 remote_builder=remote_builder,
                 bot=bot,
+                signing_key=signing_key,
             )
 
             pb.clone_or_fetch()
@@ -127,11 +132,12 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
         bot.last_poll = datetime.now(timezone.utc).isoformat()
 
 
-def rebuild_callback_factory(config, state, sdk_mgr, bot, remote_builder=None):
+def rebuild_callback_factory(config, state, sdk_mgr, bot, remote_builder=None,
+                             signing_key=None):
     """Create a rebuild callback for the Telegram bot."""
     async def rebuild(target: str):
         await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target,
-                              remote_builder=remote_builder)
+                              remote_builder=remote_builder, signing_key=signing_key)
         # Destroy remote server after manual rebuild too
         if remote_builder and remote_builder._server_name:
             if bot:
@@ -157,6 +163,19 @@ async def main():
             arch = TARGET_ARCH_MAP[target]
             (Path(FEED_DIR) / arch).mkdir(parents=True, exist_ok=True)
     (Path(FEED_DIR) / "all").mkdir(parents=True, exist_ok=True)
+
+    # Generate signing keypair if it doesn't exist
+    signing_key = None
+    if not Path(SIGNING_KEY).exists():
+        logger.info("Generating feed signing keypair")
+        subprocess.run(
+            ["usign", "-G", "-s", SIGNING_KEY, "-p", SIGNING_PUB,
+             "-c", "openwrt-builder"],
+            check=True,
+        )
+    if Path(SIGNING_KEY).exists():
+        signing_key = SIGNING_KEY
+        logger.info("Feed signing enabled")
 
     # Set up remote builder if Hetzner is configured
     remote_builder = None
@@ -205,11 +224,11 @@ async def main():
             state_manager=state,
             repos_config=config["repos"],
             rebuild_callback=rebuild_callback_factory(
-                config, state, sdk_mgr, None, remote_builder),
+                config, state, sdk_mgr, None, remote_builder, signing_key),
             log_dir=LOG_DIR,
         )
         bot.rebuild_callback = rebuild_callback_factory(
-            config, state, sdk_mgr, bot, remote_builder)
+            config, state, sdk_mgr, bot, remote_builder, signing_key)
 
         app = bot.build_application()
 
@@ -226,7 +245,8 @@ async def main():
             logger.info("Starting build cycle")
 
             await run_build_cycle(config, state, sdk_mgr, bot=bot,
-                                  remote_builder=remote_builder)
+                                  remote_builder=remote_builder,
+                                  signing_key=signing_key)
 
             # Destroy remote server after each build cycle to save costs
             if remote_builder and remote_builder._server_name:

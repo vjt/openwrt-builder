@@ -17,6 +17,8 @@ services:
       - ./runtime/ssh.key:/root/.ssh/builder.key:ro
       - ./runtime/config.yaml:/etc/openwrt-builder/config.yaml:ro
       - ./runtime/hetzner.token:/etc/openwrt-builder/hetzner.token:ro
+      - ./runtime/feed-signing.key:/etc/openwrt-builder/feed-signing.key
+      - ./runtime/feed-signing.pub:/etc/openwrt-builder/feed-signing.pub
     environment:
       - TERM=xterm
       - TELEGRAM_BOT_TOKEN
