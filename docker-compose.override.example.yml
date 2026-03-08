@@ -1,0 +1,17 @@
+# docker-compose.override.yml — per-host overrides (not checked in)
+#
+# Example: attach feed-server to an existing macvlan network
+# with a static IP, instead of using the default port mapping.
+#
+# Copy this to docker-compose.override.yml and adjust to taste.
+
+services:
+  feed-server:
+    ports: !reset []  # remove default port mapping
+    networks:
+      - macvlan
+
+networks:
+  macvlan:
+    external: true
+    name: my-macvlan-network  # adjust to your network name
