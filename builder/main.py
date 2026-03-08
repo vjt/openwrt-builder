@@ -60,8 +60,6 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
 
             if not state.has_changed(name, commit) and force_repo is None:
                 logger.info("No changes for %s (at %s), skipping", name, commit[:7])
-                if bot:
-                    await bot.notify_skip(name, commit)
                 continue
 
             logger.info("Building %s (commit %s)", name, commit[:7])
@@ -134,7 +132,7 @@ def rebuild_callback_factory(config, state, sdk_mgr, bot, remote_builder=None):
         await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target,
                               remote_builder=remote_builder)
         # Destroy remote server after manual rebuild too
-        if remote_builder:
+        if remote_builder and remote_builder._server_name:
             if bot:
                 await bot.notify_server_destroy()
             try:
@@ -227,14 +225,12 @@ async def main():
     try:
         while True:
             logger.info("Starting build cycle")
-            if bot:
-                await bot.notify_cycle_start()
 
             await run_build_cycle(config, state, sdk_mgr, bot=bot,
                                   remote_builder=remote_builder)
 
             # Destroy remote server after each build cycle to save costs
-            if remote_builder:
+            if remote_builder and remote_builder._server_name:
                 if bot:
                     await bot.notify_server_destroy()
                 try:
@@ -243,8 +239,6 @@ async def main():
                     logger.warning("Failed to destroy build server: %s", e)
 
             logger.info("Build cycle complete, sleeping %d seconds", poll_interval)
-            if bot:
-                await bot.notify_cycle_done(poll_interval)
             await asyncio.sleep(poll_interval)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down")
