@@ -114,6 +114,7 @@ class PackageBuilder:
         sdk_manager: SDKManager,
         sdk_force: bool = False,
         remote_builder=None,
+        bot=None,
     ):
         self.name = repo_config["name"]
         self.url = repo_config["url"]
@@ -124,6 +125,7 @@ class PackageBuilder:
         self.sdk_manager = sdk_manager
         self.sdk_force = sdk_force
         self.remote_builder = remote_builder
+        self.bot = bot
 
     def clone_or_fetch(self):
         """Clone the repo if new, or fetch latest changes."""
@@ -153,7 +155,7 @@ class PackageBuilder:
         )
         return result.decode().strip()
 
-    def build_for_target(self, target: str) -> list[Path]:
+    async def build_for_target(self, target: str) -> list[Path]:
         """Build the package for a specific target. Returns list of .ipk paths."""
         method, makefile_dir = self._detect_build_method()
 
@@ -173,7 +175,7 @@ class PackageBuilder:
 
         # method == "sdk"
         if self.remote_builder:
-            return self._build_remote(target, makefile_dir=makefile_dir)
+            return await self._build_remote(target, makefile_dir=makefile_dir)
         return self._build_with_sdk(target, makefile_dir=makefile_dir)
 
     def _detect_build_method(self) -> tuple[str, Path | None]:
@@ -254,13 +256,21 @@ class PackageBuilder:
                      first_target)
         return first_target
 
-    def _build_remote(self, target: str,
-                       makefile_dir: Path | None = None) -> list[Path]:
+    async def _build_remote(self, target: str,
+                             makefile_dir: Path | None = None) -> list[Path]:
         """Build the package on a remote Hetzner instance via SSH."""
         arch_dir = self._get_arch_dir(target)
         arch_dir.mkdir(parents=True, exist_ok=True)
 
+        created = self.remote_builder._server_ip is None
+        if created and self.bot:
+            await self.bot.notify_server_create(
+                self.remote_builder.server_type, self.remote_builder.location)
+
         self.remote_builder.ensure_server()
+
+        if created and self.bot:
+            await self.bot.notify_server_ready(self.remote_builder._server_ip)
 
         # Sync the local clone to the remote server
         self.remote_builder.sync_repo(str(self.repo_dir), self.name)
@@ -350,13 +360,13 @@ class PackageBuilder:
             sdk_path / "bin" / "packages", arch_dir
         )
 
-    def build_all_targets(self) -> dict[str, list[Path]]:
+    async def build_all_targets(self) -> dict[str, list[Path]]:
         """Build for all configured targets. Returns {target: [ipk_paths]}."""
         results = {}
         modified_dirs = set()
 
         for target in self.targets:
-            ipks = self.build_for_target(target)
+            ipks = await self.build_for_target(target)
             results[target] = ipks
             modified_dirs.add(str(self._get_arch_dir(target)))
 

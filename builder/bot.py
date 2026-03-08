@@ -170,6 +170,12 @@ class OpenwrtBot:
     async def notify_cycle_done(self, poll_interval: int):
         await self.notify(f"Build cycle complete, sleeping {poll_interval}s")
 
+    async def notify_server_create(self, server_type: str, location: str):
+        await self.notify(f"Creating build server ({server_type} in {location})...")
+
+    async def notify_server_ready(self, ip: str):
+        await self.notify(f"Build server ready at {ip}")
+
     async def notify_server_destroy(self):
         await self.notify("Destroying build server")
 

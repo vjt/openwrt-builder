@@ -53,6 +53,7 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
                 sdk_manager=sdk_mgr,
                 sdk_force=config.get("sdk_force", False),
                 remote_builder=remote_builder,
+                bot=bot,
             )
 
             pb.clone_or_fetch()
@@ -65,7 +66,7 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
             logger.info("Building %s (commit %s)", name, commit[:7])
             if bot:
                 await bot.notify_build_start(name, commit)
-            results = pb.build_all_targets()
+            results = await pb.build_all_targets()
 
             total_ipks = sum(len(v) for v in results.values())
             logger.info("Built %d .ipk files for %s", total_ipks, name)
@@ -209,8 +210,6 @@ async def main():
         )
         bot.rebuild_callback = rebuild_callback_factory(
             config, state, sdk_mgr, bot, remote_builder)
-        if remote_builder:
-            remote_builder.bot = bot
 
         app = bot.build_application()
 

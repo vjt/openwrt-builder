@@ -208,8 +208,9 @@ def test_pick_any_sdk_target_prefers_cached(repo_dir):
     assert target == "ramips/mt7621"
 
 
-def test_build_for_target_skip_returns_empty(repo_dir):
+@pytest.mark.asyncio
+async def test_build_for_target_skip_returns_empty(repo_dir):
     pb, _ = _make_builder(repo_dir)
 
-    result = pb.build_for_target("all")
+    result = await pb.build_for_target("all")
     assert result == []
