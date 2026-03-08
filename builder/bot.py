@@ -5,7 +5,7 @@ import io
 import logging
 from pathlib import Path
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -186,4 +186,14 @@ class OpenwrtBot:
         self.app.add_handler(CommandHandler("list", self.cmd_list))
         self.app.add_handler(CommandHandler("rebuild", self.cmd_rebuild))
         self.app.add_handler(CommandHandler("logs", self.cmd_logs))
+        self.app.post_init = self._post_init
         return self.app
+
+    async def _post_init(self, application: Application) -> None:
+        """Register bot commands for Telegram autocompletion."""
+        await application.bot.set_my_commands([
+            BotCommand("status", "Show build status for all repos"),
+            BotCommand("list", "List configured repos"),
+            BotCommand("rebuild", "Rebuild a repo or all repos"),
+            BotCommand("logs", "Show build log for a repo"),
+        ])
