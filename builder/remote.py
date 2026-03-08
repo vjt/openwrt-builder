@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import subprocess
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from config import TARGET_ARCH_MAP
@@ -57,16 +58,19 @@ class RemoteBuilder:
         self._server_ip: str | None = None
         self._setup_done: set[str] = set()  # targets already set up on the server
 
-    def _notify(self, method_name: str, *args):
-        """Fire an async bot notification from sync code."""
+    def _notify(self, message: str):
+        """Send a Telegram notification synchronously (bypasses async event loop)."""
         if not self.bot:
             return
+        url = f"https://api.telegram.org/bot{self.bot.token}/sendMessage"
+        data = urllib.parse.urlencode({
+            "chat_id": self.bot.chat_id,
+            "text": message,
+        }).encode()
         try:
-            loop = asyncio.get_running_loop()
-            method = getattr(self.bot, method_name)
-            loop.create_task(method(*args))
-        except RuntimeError:
-            pass
+            urllib.request.urlopen(url, data, timeout=10)
+        except Exception as e:
+            logger.warning("Failed to send notification: %s", e)
 
     def _hcloud(self, *args: str) -> subprocess.CompletedProcess:
         """Run an hcloud CLI command with the API token."""
@@ -127,7 +131,7 @@ class RemoteBuilder:
         self._server_name = f"openwrt-builder-{int(time.time())}"
         logger.info("Creating build server %s (%s in %s)",
                      self._server_name, self.server_type, self.location)
-        self._notify("notify_server_create", self.server_type, self.location)
+        self._notify(f"Creating build server ({self.server_type} in {self.location})...")
 
         result = self._hcloud(
             "server", "create",
@@ -148,7 +152,7 @@ class RemoteBuilder:
         logger.info("Server %s created at %s", self._server_name, self._server_ip)
 
         self._wait_for_ssh()
-        self._notify("notify_server_ready", self._server_ip)
+        self._notify(f"Build server ready at {self._server_ip}")
         return self._server_ip
 
     def _wait_for_ssh(self) -> None:
