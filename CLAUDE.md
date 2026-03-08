@@ -20,7 +20,6 @@ Storage:
 |---|---|
 | `docker-compose.yml` | Both services, bind mounts for feed/config/ssh, `cache-*` volumes for sdk/repos |
 | `docker-compose.override.example.yml` | Example per-host overrides (macvlan networking etc.) |
-| `Makefile` | `make deploy REMOTE=user@host` — git push + ssh pull + rebuild |
 | `nginx.conf` | Minimal autoindex config for the feed directory |
 | `config.example.yaml` | Example config — copy to `runtime/config.yaml` to use |
 | `builder/config.py` | Loads YAML config, resolves `${ENV_VAR}` syntax, validates targets |
@@ -80,8 +79,6 @@ python3 -m venv .venv
 3. Optionally copy `docker-compose.override.example.yml` to `docker-compose.override.yml` for custom networking
 4. `docker compose build && docker compose up -d`
 5. On each OpenWrt AP: `echo "src/gz custom http://<server>:8081/all" >> /etc/opkg/customfeeds.conf`
-
-Remote deploy: `make deploy REMOTE=user@host REMOTE_DIR=/opt/openwrt-builder`
 
 First run downloads SDKs (~500MB-1GB each), cached in `cache-sdk` Docker volume.
 
