@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from config import TARGET_ARCH_MAP
 from sdk import SDKManager
+
+if TYPE_CHECKING:
+    from bot import OpenwrtBot
+    from remote import RemoteBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -123,13 +129,13 @@ def _manual_reindex(feed_path: Path):
 class PackageBuilder:
     def __init__(
         self,
-        repo_config: dict,
+        repo_config: dict[str, Any],
         repo_cache_dir: str,
         feed_dir: str,
         sdk_manager: SDKManager,
         sdk_force: bool = False,
-        remote_builder=None,
-        bot=None,
+        remote_builder: RemoteBuilder | None = None,
+        bot: OpenwrtBot | None = None,
         signing_key: str | None = None,
     ):
         self.name = repo_config["name"]
@@ -276,6 +282,8 @@ class PackageBuilder:
     async def _build_remote(self, target: str,
                              makefile_dir: Path | None = None) -> list[Path]:
         """Build the package on a remote Hetzner instance via SSH."""
+        assert self.remote_builder is not None
+
         arch_dir = self._get_arch_dir(target)
         arch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -284,10 +292,10 @@ class PackageBuilder:
             await self.bot.notify_server_create(
                 self.remote_builder.server_type, self.remote_builder.location)
 
-        self.remote_builder.ensure_server()
+        ip = self.remote_builder.ensure_server()
 
         if created and self.bot:
-            await self.bot.notify_server_ready(self.remote_builder._server_ip)
+            await self.bot.notify_server_ready(ip)
 
         # Sync the local clone to the remote server
         self.remote_builder.sync_repo(str(self.repo_dir), self.name)
@@ -397,5 +405,4 @@ class PackageBuilder:
 
 def _nproc() -> int:
     """Return number of CPUs available."""
-    import os
     return os.cpu_count() or 1

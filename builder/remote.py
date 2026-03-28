@@ -133,6 +133,7 @@ class RemoteBuilder:
         logger.info("Server %s created at %s", self._server_name, self._server_ip)
 
         self._wait_for_ssh()
+        assert self._server_ip is not None
         return self._server_ip
 
     def _wait_for_ssh(self) -> None:

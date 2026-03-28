@@ -5,6 +5,7 @@ import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from config import load_config, TARGET_ARCH_MAP
 from state import StateManager
@@ -32,10 +33,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("openwrt-builder")
 
 
-async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager,
+async def run_build_cycle(config: dict[str, Any], state: StateManager, sdk_mgr: SDKManager,
                     bot: OpenwrtBot | None = None, force_repo: str | None = None,
                     remote_builder: RemoteBuilder | None = None,
-                    signing_key: str | None = None):
+                    signing_key: str | None = None) -> None:
     """Run one build cycle across all repos (or a specific one)."""
     repos = config["repos"]
     if force_repo and force_repo != "all":
@@ -76,9 +77,10 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
             total_ipks = sum(len(v) for v in results.values())
             logger.info("Built %d .ipk files for %s", total_ipks, name)
 
+            prev_repo = state.get_repo(name)
             was_failed = (
-                state.get_repo(name) is not None
-                and state.get_repo(name).get("status") == "failed"
+                prev_repo is not None
+                and prev_repo.get("status") == "failed"
             )
 
             state.record_success(name, commit)
@@ -132,8 +134,10 @@ async def run_build_cycle(config: dict, state: StateManager, sdk_mgr: SDKManager
         bot.last_poll = datetime.now(timezone.utc).isoformat()
 
 
-def rebuild_callback_factory(config, state, sdk_mgr, bot, remote_builder=None,
-                             signing_key=None):
+def rebuild_callback_factory(config: dict[str, Any], state: StateManager,
+                             sdk_mgr: SDKManager, bot: OpenwrtBot | None,
+                             remote_builder: RemoteBuilder | None = None,
+                             signing_key: str | None = None) -> Any:
     """Create a rebuild callback for the Telegram bot."""
     async def rebuild(target: str):
         await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target,
@@ -234,6 +238,7 @@ async def main():
 
         await app.initialize()
         await app.start()
+        assert app.updater is not None
         await app.updater.start_polling()
         logger.info("Telegram bot started")
 
@@ -268,7 +273,8 @@ async def main():
             except Exception:
                 pass
         if bot and bot.app:
-            await bot.app.updater.stop()
+            if bot.app.updater:
+                await bot.app.updater.stop()
             await bot.app.stop()
             await bot.app.shutdown()
 

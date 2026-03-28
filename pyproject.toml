@@ -1,0 +1,12 @@
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["builder"]
+exclude = ["builder/tests"]
+extraPaths = ["builder"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["builder/tests"]
+asyncio_mode = "strict"

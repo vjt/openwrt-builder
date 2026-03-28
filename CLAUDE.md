@@ -1,5 +1,49 @@
 # OpenWrt Automated Package Builder
 
+## Engineering Standards
+
+- **Challenge the spec.** If domain knowledge contradicts the requirements,
+  say so before building. A 30-second question costs nothing. Building the
+  wrong thing costs hundreds of commits.
+- **Ask before building.** Before implementing anything substantial:
+  (1) Does the infrastructure already provide this? (2) Is there a 10x
+  simpler approach? (3) Will this still exist in two weeks?
+- **Design discipline.** Before proposing new mechanisms or structures:
+  (1) Don't duplicate state that already exists — derive it.
+  (2) Think about the general problem, not the specific incident.
+  (3) Lightweight over heavyweight. If the mechanism is heavier than the
+  problem, the mechanism IS the problem.
+  (4) Think it through before proposing — consider all dimensions, then
+  present. Don't make the human iterate half-baked proposals into shape.
+- **Debug with data first**: read logs, inspect state, before changing code.
+  NEVER guess. NEVER change code speculatively. Evidence first.
+- **Never fabricate explanations.** If you don't know why something happened,
+  say "I don't know, let me check" and read the code or logs.
+- **Read before writing.** Before editing any file, read its helpers,
+  utilities, and existing patterns. Grep for what you're about to build —
+  it probably exists.
+- **Implement once, reuse everywhere**: if two places need the same logic,
+  refactor to share it. Never copy-paste with tweaks.
+- **Consistency**: follow existing patterns. Same problem, same solution.
+- **Fix root causes, not examples**: no band-aids. A bug report is one
+  instance of a broader class — find the general rule.
+- **Never swallow exceptions**: handle explicitly or let crash.
+- **Never rely on restarts**: long-lived Docker process. Retry in-process.
+- **No leaky abstractions**: each layer owns its domain. Return domain
+  types, not strings/dicts callers parse.
+- **Bite-sized commits**: one logical change. Messages explain WHY.
+- **Don't overengineer.** "add X" means add X, not X + Y + Z.
+- **Don't iterate through 10 wrong approaches.** Stop, think, ask.
+
+## Testing Standards
+
+- Assert outcomes, not call sequences. Ask: "If the implementation were
+  wrong, would this test catch it?" If not, the test is a mirror.
+- Mock at boundaries, real dependencies inside.
+- **Never weaken production code to make tests pass.** If a test needs
+  special setup, fix the test.
+- Test helpers mandatory. Names = scenario + outcome.
+
 ## Project Overview
 
 Docker-based system that polls git repos and automatically rebuilds OpenWrt packages (Lua/config and compiled C) when changes are detected. Serves packages via an nginx feed server. Controlled via a Telegram bot. SDK builds run on on-demand Hetzner x86_64 instances for native compilation speed.
@@ -86,11 +130,19 @@ Fallback: if Hetzner is not configured, SDK builds run locally (slow on ARM unde
 cd builder && ../.venv/bin/python3 -m pytest tests/ -v
 ```
 
+### Type Checking
+
+```bash
+.venv/bin/pyright
+```
+
+Zero errors at `standard` mode. Config in `pyproject.toml`.
+
 ### Dependencies (local dev)
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install pytest pytest-asyncio pyyaml python-telegram-bot
+.venv/bin/pip install pytest pytest-asyncio pyyaml python-telegram-bot pyright
 ```
 
 ### Test Structure

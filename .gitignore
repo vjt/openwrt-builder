@@ -3,7 +3,8 @@ packages/
 *.ipk
 __pycache__/
 *.pyc
-.claude
+.pytest_cache/
+.claude/
 .venv/
 runtime/
 docker-compose.override.yml
