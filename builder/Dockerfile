@@ -42,8 +42,18 @@ RUN pip3 install --break-system-packages -r requirements.txt
 COPY *.py ./
 COPY tests/ ./tests/
 
-# Create directories and configure SSH for private repos
-RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs /root/.ssh \
-    && printf "StrictHostKeyChecking no\nIdentityFile /runtime/ssh.key\n" > /root/.ssh/config
+# Run as the host user (matches file ownership on bind mounts)
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID builder 2>/dev/null || true \
+    && useradd -u $UID -g $GID -m -s /bin/bash builder
 
+# Create directories and configure SSH for private repos
+RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs \
+    && chown -R builder:builder /feed /opt/sdk /opt/repos /tmp/build-logs /app
+RUN mkdir -p /home/builder/.ssh \
+    && printf "StrictHostKeyChecking no\nIdentityFile /runtime/ssh.key\n" > /home/builder/.ssh/config \
+    && chown -R builder:builder /home/builder/.ssh
+
+USER builder
 CMD ["python3", "main.py"]
