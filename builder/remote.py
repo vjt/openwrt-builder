@@ -363,13 +363,19 @@ echo "===PKG_LIST_END==="
             check=True,
         )
 
+        # --allow-untrusted: every .apk produced by the SDK is signed with an
+        # ephemeral build-time key whose public half is NOT in the remote
+        # server's apk keyring, so strict verification always fails. We built
+        # these packages ourselves one step earlier in this same process, so
+        # skipping the verify gate is safe. Router-side trust is a separate
+        # concern tracked via the usign-equivalent apk signing of the index.
         index_script = f"""set -e
 cd {remote_feed}
 if [ ! -x {apk_bin} ]; then
     echo "apk binary missing at {apk_bin}" >&2
     exit 1
 fi
-{apk_bin} mkndx -o APKINDEX.tar.gz *.apk
+{apk_bin} --allow-untrusted mkndx -o APKINDEX.tar.gz *.apk
 """
         result = self._ssh_script(index_script, check=False)
         if result.returncode != 0:
