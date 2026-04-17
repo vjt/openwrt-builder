@@ -132,7 +132,7 @@ class PackageBuilder:
         repo_config: dict[str, Any],
         repo_cache_dir: str,
         feed_dir: str,
-        sdk_manager: SDKManager,
+        sdk_managers: dict[str, SDKManager],
         sdk_force: bool = False,
         remote_builder: RemoteBuilder | None = None,
         bot: OpenwrtBot | None = None,
@@ -142,9 +142,15 @@ class PackageBuilder:
         self.url = repo_config["url"]
         self.branch = repo_config["branch"]
         self.targets = repo_config.get("targets", [])
+        self.openwrt_version = repo_config["openwrt_version"]
         self.repo_dir = Path(repo_cache_dir) / self.name
         self.feed_dir = Path(feed_dir)
-        self.sdk_manager = sdk_manager
+        if self.openwrt_version not in sdk_managers:
+            raise RuntimeError(
+                f"No SDKManager registered for openwrt_version "
+                f"{self.openwrt_version!r} (repo {self.name})"
+            )
+        self.sdk_manager = sdk_managers[self.openwrt_version]
         self.sdk_force = sdk_force
         self.remote_builder = remote_builder
         self.bot = bot
@@ -310,6 +316,7 @@ class PackageBuilder:
             makefile_subdir=makefile_subdir,
             target=target,
             sdk_force=self.sdk_force,
+            openwrt_version=self.openwrt_version,
         )
 
         return self.remote_builder.download_ipks(remote_ipks, str(arch_dir))

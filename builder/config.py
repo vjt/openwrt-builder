@@ -51,6 +51,7 @@ def load_config(path: str) -> dict[str, Any]:
     config = _resolve_recursive(raw)
 
     default_targets = config.get("default_targets", [])
+    default_version = config.get("openwrt_version")
 
     # Validate default targets
     for t in default_targets:
@@ -65,5 +66,12 @@ def load_config(path: str) -> dict[str, Any]:
         for t in repo["targets"]:
             if t not in VALID_TARGETS:
                 raise ValueError(f"Unknown target: {t}")
+        # Per-repo openwrt_version override (falls back to global)
+        if "openwrt_version" not in repo:
+            repo["openwrt_version"] = default_version
+        if not isinstance(repo["openwrt_version"], str):
+            raise ValueError(
+                f"Repo {repo.get('name')!r}: openwrt_version must be a string"
+            )
 
     return config

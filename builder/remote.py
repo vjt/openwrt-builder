@@ -52,7 +52,9 @@ class RemoteBuilder:
 
         self._server_name: str | None = None
         self._server_ip: str | None = None
-        self._setup_done: set[str] = set()
+        # Cache keyed by (target, openwrt_version) — the same target under
+        # different OpenWrt versions needs distinct SDKs on the remote host.
+        self._setup_done: set[tuple[str, str]] = set()
 
     def _hcloud(self, *args: str) -> subprocess.CompletedProcess:
         """Run an hcloud CLI command with the API token."""
@@ -168,21 +170,24 @@ class RemoteBuilder:
             check=True,
         )
 
-    def setup_sdk(self, target: str) -> str:
+    def setup_sdk(self, target: str, openwrt_version: str | None = None) -> str:
         """Install build deps and download SDK on the remote server.
 
         Returns the remote SDK path.
         """
+        version = openwrt_version or self.openwrt_version
         actual_target = target
         if target == "all":
             actual_target = next(iter(TARGET_ARCH_MAP))
 
-        if actual_target in self._setup_done:
-            logger.info("SDK for %s already set up on remote", actual_target)
-            return self._remote_sdk_path(actual_target)
+        cache_key = (actual_target, version)
+        if cache_key in self._setup_done:
+            logger.info("SDK for %s (owrt %s) already set up on remote",
+                         actual_target, version)
+            return self._remote_sdk_path(actual_target, version)
 
-        url = sdk_url(self.openwrt_version, actual_target)
-        sdk_path = self._remote_sdk_path(actual_target)
+        url = sdk_url(version, actual_target)
+        sdk_path = self._remote_sdk_path(actual_target, version)
 
         setup_script = f"""set -e
 # Install deps (idempotent)
@@ -201,21 +206,24 @@ if [ ! -d {sdk_path} ]; then
 fi
 echo "SDK ready at {sdk_path}"
 """
-        logger.info("Setting up SDK for %s on remote...", actual_target)
+        logger.info("Setting up SDK for %s (owrt %s) on remote...",
+                     actual_target, version)
         result = self._ssh_script(setup_script, check=False)
         if result.returncode != 0:
             raise RuntimeError(
                 f"Remote SDK setup failed: {result.stderr.strip()}"
             )
 
-        self._setup_done.add(actual_target)
-        logger.info("SDK for %s ready on remote", actual_target)
+        self._setup_done.add(cache_key)
+        logger.info("SDK for %s (owrt %s) ready on remote",
+                     actual_target, version)
         return sdk_path
 
-    def _remote_sdk_path(self, target: str) -> str:
+    def _remote_sdk_path(self, target: str, openwrt_version: str | None = None) -> str:
         """Return the expected SDK directory path on the remote server."""
         from sdk import sdk_dirname
-        return f"/opt/sdk/{sdk_dirname(self.openwrt_version, target)}"
+        version = openwrt_version or self.openwrt_version
+        return f"/opt/sdk/{sdk_dirname(version, target)}"
 
     def build_package(
         self,
@@ -223,6 +231,7 @@ echo "SDK ready at {sdk_path}"
         makefile_subdir: str | None,
         target: str,
         sdk_force: bool = False,
+        openwrt_version: str | None = None,
     ) -> list[str]:
         """Build a package on the remote server.
 
@@ -233,7 +242,7 @@ echo "SDK ready at {sdk_path}"
         if target == "all":
             actual_target = next(iter(TARGET_ARCH_MAP))
 
-        sdk_path = self.setup_sdk(actual_target)
+        sdk_path = self.setup_sdk(actual_target, openwrt_version=openwrt_version)
 
         # Determine what to symlink into the SDK
         source_dir = f"/tmp/src/{name}"

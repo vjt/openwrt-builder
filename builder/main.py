@@ -33,7 +33,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("openwrt-builder")
 
 
-async def run_build_cycle(config: dict[str, Any], state: StateManager, sdk_mgr: SDKManager,
+async def run_build_cycle(config: dict[str, Any], state: StateManager,
+                    sdk_mgrs: dict[str, SDKManager],
                     bot: OpenwrtBot | None = None, force_repo: str | None = None,
                     remote_builder: RemoteBuilder | None = None,
                     signing_key: str | None = None) -> None:
@@ -55,7 +56,7 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager, sdk_mgr: 
                 repo_config=repo_config,
                 repo_cache_dir=REPO_CACHE_DIR,
                 feed_dir=FEED_DIR,
-                sdk_manager=sdk_mgr,
+                sdk_managers=sdk_mgrs,
                 sdk_force=config.get("sdk_force", False),
                 remote_builder=remote_builder,
                 bot=bot,
@@ -111,7 +112,7 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager, sdk_mgr: 
                     repo_config=repo_config,
                     repo_cache_dir=REPO_CACHE_DIR,
                     feed_dir=FEED_DIR,
-                    sdk_manager=sdk_mgr,
+                    sdk_managers=sdk_mgrs,
                 )
                 commit = pb2.get_head_commit()
             except Exception:
@@ -135,12 +136,13 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager, sdk_mgr: 
 
 
 def rebuild_callback_factory(config: dict[str, Any], state: StateManager,
-                             sdk_mgr: SDKManager, bot: OpenwrtBot | None,
+                             sdk_mgrs: dict[str, SDKManager],
+                             bot: OpenwrtBot | None,
                              remote_builder: RemoteBuilder | None = None,
                              signing_key: str | None = None) -> Any:
     """Create a rebuild callback for the Telegram bot."""
     async def rebuild(target: str):
-        await run_build_cycle(config, state, sdk_mgr, bot=bot, force_repo=target,
+        await run_build_cycle(config, state, sdk_mgrs, bot=bot, force_repo=target,
                               remote_builder=remote_builder, signing_key=signing_key)
         # Destroy remote server after manual rebuild too
         if remote_builder and remote_builder._server_name:
@@ -158,7 +160,15 @@ async def main():
 
     config = load_config(CONFIG_PATH)
     state = StateManager(STATE_FILE)
-    sdk_mgr = SDKManager(config["openwrt_version"], SDK_CACHE_DIR)
+
+    # Build an SDKManager per distinct openwrt_version across global + repos.
+    # Repos without an explicit override inherit config["openwrt_version"].
+    versions_needed: set[str] = {config["openwrt_version"]}
+    for repo in config.get("repos", []):
+        versions_needed.add(repo["openwrt_version"])
+    sdk_mgrs: dict[str, SDKManager] = {
+        v: SDKManager(v, SDK_CACHE_DIR) for v in versions_needed
+    }
 
     for target in config["default_targets"]:
         if target == "all":
@@ -205,19 +215,35 @@ async def main():
     # Only download SDKs locally if not using remote builder
     if not remote_builder:
         logger.info("Ensuring SDKs are downloaded...")
-        unique_targets = [
-            t for t in config["default_targets"] if t != "all"
-        ]
-        for target in unique_targets:
-            sdk_mgr.ensure_downloaded(target)
 
-        # Ensure at least one SDK is available for arch-independent builds
-        if not unique_targets and all(
-            sdk_mgr.needs_download(t) for t in TARGET_ARCH_MAP
-        ):
-            first_target = next(iter(TARGET_ARCH_MAP))
-            logger.info("Downloading %s SDK for arch-independent builds", first_target)
-            sdk_mgr.ensure_downloaded(first_target)
+        # Collect (version, target) pairs actually needed by the repo set.
+        version_targets: dict[str, set[str]] = {}
+        for repo in config.get("repos", []):
+            v = repo["openwrt_version"]
+            for t in repo.get("targets", []):
+                if t == "all":
+                    continue
+                version_targets.setdefault(v, set()).add(t)
+
+        # Fall back to default_targets under the global version if no repos.
+        if not version_targets:
+            default_v = config["openwrt_version"]
+            version_targets[default_v] = {
+                t for t in config["default_targets"] if t != "all"
+            }
+
+        for version, targets in version_targets.items():
+            mgr = sdk_mgrs[version]
+            for target in targets:
+                mgr.ensure_downloaded(target)
+            # Ensure at least one SDK per version for arch-independent builds
+            if not targets and all(
+                mgr.needs_download(t) for t in TARGET_ARCH_MAP
+            ):
+                first_target = next(iter(TARGET_ARCH_MAP))
+                logger.info("Downloading %s SDK (owrt %s) for arch-independent builds",
+                             first_target, version)
+                mgr.ensure_downloaded(first_target)
 
     tg_config = config.get("telegram", {})
     bot = None
@@ -228,11 +254,11 @@ async def main():
             state_manager=state,
             repos_config=config["repos"],
             rebuild_callback=rebuild_callback_factory(
-                config, state, sdk_mgr, None, remote_builder, signing_key),
+                config, state, sdk_mgrs, None, remote_builder, signing_key),
             log_dir=LOG_DIR,
         )
         bot.rebuild_callback = rebuild_callback_factory(
-            config, state, sdk_mgr, bot, remote_builder, signing_key)
+            config, state, sdk_mgrs, bot, remote_builder, signing_key)
 
         app = bot.build_application()
 
@@ -249,7 +275,7 @@ async def main():
         while True:
             logger.info("Starting build cycle")
 
-            await run_build_cycle(config, state, sdk_mgr, bot=bot,
+            await run_build_cycle(config, state, sdk_mgrs, bot=bot,
                                   remote_builder=remote_builder,
                                   signing_key=signing_key)
 

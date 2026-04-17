@@ -9,16 +9,31 @@ logger = logging.getLogger(__name__)
 # ARM targets that need the _eabi suffix
 EABI_TARGETS = {"bcm27xx/bcm2709"}
 
-GCC_VERSION = "13.3.0"
+# GCC toolchain version shipped in each OpenWrt release.
+# Must be kept in sync with https://downloads.openwrt.org/releases/<ver>/targets/
+GCC_VERSIONS: dict[str, str] = {
+    "24.10.0": "13.3.0",
+    "25.12.0": "14.3.0",
+    "SNAPSHOT": "14.3.0",
+}
+DEFAULT_GCC_VERSION = "13.3.0"
+
+
+def _gcc_for(version: str) -> str:
+    return GCC_VERSIONS.get(version, DEFAULT_GCC_VERSION)
+
+
+def _releases_path(version: str) -> str:
+    """Snapshots live under a different path than tagged releases."""
+    return "snapshots" if version == "SNAPSHOT" else f"releases/{version}"
 
 
 def sdk_url(version: str, target: str) -> str:
     """Build the download URL for an OpenWrt SDK."""
     dirname = sdk_dirname(version, target)
-    target_path = target  # e.g., "mediatek/filogic"
     return (
-        f"https://downloads.openwrt.org/releases/{version}/"
-        f"targets/{target_path}/{dirname}.tar.zst"
+        f"https://downloads.openwrt.org/{_releases_path(version)}/"
+        f"targets/{target}/{dirname}.tar.zst"
     )
 
 
@@ -28,7 +43,7 @@ def sdk_dirname(version: str, target: str) -> str:
     suffix = "_eabi" if target in EABI_TARGETS else ""
     return (
         f"openwrt-sdk-{version}-{target_slug}"
-        f"_gcc-{GCC_VERSION}_musl{suffix}.Linux-x86_64"
+        f"_gcc-{_gcc_for(version)}_musl{suffix}.Linux-x86_64"
     )
 
 

@@ -27,11 +27,15 @@ def repo_dir(tmp_path):
     return d
 
 
+_TEST_VERSION = "24.10.0"
+
+
 def _make_builder(repo_dir, feed_dir=None, name="test-pkg"):
     repo_config = {
         "name": name,
         "url": "https://github.com/test/test-pkg.git",
         "branch": "main",
+        "openwrt_version": _TEST_VERSION,
     }
     pkg_dir = repo_dir / name
     pkg_dir.mkdir(exist_ok=True)
@@ -39,7 +43,7 @@ def _make_builder(repo_dir, feed_dir=None, name="test-pkg"):
         repo_config=repo_config,
         repo_cache_dir=str(repo_dir),
         feed_dir=str(feed_dir or repo_dir / "feed"),
-        sdk_manager=MagicMock(),
+        sdk_managers={_TEST_VERSION: MagicMock()},
     ), pkg_dir
 
 
@@ -48,12 +52,13 @@ def test_clone_new_repo(repo_dir):
         "name": "test-pkg",
         "url": "https://github.com/test/test-pkg.git",
         "branch": "main",
+        "openwrt_version": _TEST_VERSION,
     }
     pb = PackageBuilder(
         repo_config=repo_config,
         repo_cache_dir=str(repo_dir),
         feed_dir="/tmp/feed",
-        sdk_manager=MagicMock(),
+        sdk_managers={_TEST_VERSION: MagicMock()},
     )
     with patch("builder.subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0)
@@ -72,12 +77,13 @@ def test_fetch_existing_repo(repo_dir):
         "name": "test-pkg",
         "url": "https://github.com/test/test-pkg.git",
         "branch": "main",
+        "openwrt_version": _TEST_VERSION,
     }
     pb = PackageBuilder(
         repo_config=repo_config,
         repo_cache_dir=str(repo_dir),
         feed_dir="/tmp/feed",
-        sdk_manager=MagicMock(),
+        sdk_managers={_TEST_VERSION: MagicMock()},
     )
     with patch("builder.subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0)
@@ -95,12 +101,13 @@ def test_get_head_commit(repo_dir):
         "name": "test-pkg",
         "url": "https://github.com/test/test-pkg.git",
         "branch": "main",
+        "openwrt_version": _TEST_VERSION,
     }
     pb = PackageBuilder(
         repo_config=repo_config,
         repo_cache_dir=str(repo_dir),
         feed_dir="/tmp/feed",
-        sdk_manager=MagicMock(),
+        sdk_managers={_TEST_VERSION: MagicMock()},
     )
     with patch("builder.subprocess") as mock_sub:
         mock_sub.check_output.return_value = b"abc123def\n"
