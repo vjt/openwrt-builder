@@ -24,8 +24,16 @@ class StateManager:
         return self.data.get(name)
 
     def has_changed(self, name: str, commit: str) -> bool:
+        """Return True if the repo should be built this cycle.
+
+        Triggers on any of: never-built, new commit, or previous build
+        failed — a transient failure (SSH timeout, network blip) otherwise
+        stays unresolved until the upstream commit happens to change.
+        """
         repo = self.get_repo(name)
         if repo is None:
+            return True
+        if repo.get("status") == "failed":
             return True
         return repo.get("last_commit") != commit
 
