@@ -19,8 +19,10 @@ REMOTE_DEPS = (
     "python3-setuptools make"
 )
 
-# How long to wait for SSH to become available after server creation
-SSH_WAIT_TIMEOUT = 120
+# How long to wait for SSH to become available after server creation.
+# Hetzner CX instances occasionally take 2+ minutes to boot + run cloud-init
+# before sshd accepts connections, so 300s is the safe floor.
+SSH_WAIT_TIMEOUT = 300
 SSH_WAIT_INTERVAL = 5
 
 SSH_OPTS = [
@@ -132,7 +134,22 @@ class RemoteBuilder:
         self._server_ip = data["server"]["public_net"]["ipv4"]["ip"]
         logger.info("Server %s created at %s", self._server_name, self._server_ip)
 
-        self._wait_for_ssh()
+        # If SSH never comes up (flaky instance, firewall weirdness), the
+        # server is useless — tear it down so we don't leak €/day and so the
+        # next ensure_server() call starts from a clean slate instead of
+        # short-circuiting on this stale _server_ip.
+        try:
+            self._wait_for_ssh()
+        except Exception:
+            logger.warning("SSH wait failed for %s (%s); destroying before re-raise",
+                           self._server_name, self._server_ip)
+            try:
+                self.destroy_server()
+            except Exception as destroy_exc:
+                logger.warning("destroy_server after SSH wait failure also failed: %s",
+                               destroy_exc)
+            raise
+
         assert self._server_ip is not None
         return self._server_ip
 
