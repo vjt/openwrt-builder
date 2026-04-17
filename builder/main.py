@@ -307,38 +307,50 @@ async def main():
     poll_interval = config.get("poll_interval", 3600)
     logger.info("Poll interval: %d seconds", poll_interval)
 
+    # Always destroy any provisioned Hetzner server before exit — even on
+    # crash or a stray exception inside run_build_cycle — otherwise a process
+    # death leaks €/day servers. Bot shutdown goes in the same finally for
+    # the same reason.
     try:
         while True:
             logger.info("Starting build cycle")
 
-            await run_build_cycle(config, state, sdk_mgrs, bot=bot,
-                                  remote_builder=remote_builder,
-                                  signing_key=signing_key)
-
-            # Destroy remote server after each build cycle to save costs
-            if remote_builder and remote_builder._server_name:
-                if bot:
-                    await bot.notify_server_destroy()
-                try:
-                    remote_builder.destroy_server()
-                except Exception as e:
-                    logger.warning("Failed to destroy build server: %s", e)
+            try:
+                await run_build_cycle(config, state, sdk_mgrs, bot=bot,
+                                      remote_builder=remote_builder,
+                                      signing_key=signing_key)
+            except Exception:
+                logger.exception("Build cycle crashed — tearing down any "
+                                 "provisioned server before retrying")
+            finally:
+                if remote_builder and remote_builder._server_name:
+                    if bot:
+                        try:
+                            await bot.notify_server_destroy()
+                        except Exception:
+                            pass
+                    try:
+                        remote_builder.destroy_server()
+                    except Exception as e:
+                        logger.warning("Failed to destroy build server: %s", e)
 
             logger.info("Build cycle complete, sleeping %d seconds", poll_interval)
             await asyncio.sleep(poll_interval)
-    except (KeyboardInterrupt, SystemExit):
+    finally:
         logger.info("Shutting down")
-        # Clean up remote server on shutdown
         if remote_builder:
             try:
                 remote_builder.destroy_server()
             except Exception:
                 pass
         if bot and bot.app:
-            if bot.app.updater:
-                await bot.app.updater.stop()
-            await bot.app.stop()
-            await bot.app.shutdown()
+            try:
+                if bot.app.updater:
+                    await bot.app.updater.stop()
+                await bot.app.stop()
+                await bot.app.shutdown()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
