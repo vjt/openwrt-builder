@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +20,10 @@ FEED_DIR = "/feed"
 SDK_CACHE_DIR = "/opt/sdk"
 REPO_CACHE_DIR = "/opt/repos"
 STATE_FILE = "/feed/.builder-state.json"
-LOG_DIR = "/tmp/build-logs"
+# /tmp/build-logs is pre-created root-owned by the Dockerfile, so a non-root
+# runtime user cannot write there; override via env to point at a writable
+# bind mount.
+LOG_DIR = os.environ.get("BUILD_LOG_DIR", "/tmp/build-logs")
 
 HETZNER_TOKEN_PATH = "/runtime/hetzner.token"
 SIGNING_KEY = "/runtime/feed-signing.key"
