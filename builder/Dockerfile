@@ -34,6 +34,15 @@ RUN ARCH=$(dpkg --print-architecture) && \
     tar xzf /tmp/hcloud.tar.gz -C /usr/local/bin hcloud && \
     rm /tmp/hcloud.tar.gz
 
+# Non-root runtime user. UID/GID 1000 matches the typical host user so
+# bind-mounted ./runtime and ./feed stay host-owned. Override with
+# `user: "UID:GID"` in docker-compose if your host user is different.
+ARG BUILDER_UID=1000
+ARG BUILDER_GID=1000
+RUN groupadd --gid ${BUILDER_GID} builder && \
+    useradd --uid ${BUILDER_UID} --gid ${BUILDER_GID} \
+            --create-home --shell /bin/bash builder
+
 WORKDIR /app
 
 COPY requirements.txt .
@@ -42,8 +51,23 @@ RUN pip3 install --break-system-packages -r requirements.txt
 COPY *.py ./
 COPY tests/ ./tests/
 
-# Create directories and configure SSH for private repos
-RUN mkdir -p /feed /opt/sdk /opt/repos /tmp/build-logs /root/.ssh \
-    && printf "StrictHostKeyChecking no\nIdentityFile /runtime/ssh.key\n" > /root/.ssh/config
+# Directories the runtime writes into. Named volumes (/opt/sdk, /opt/repos)
+# inherit ownership from the image on first init, so chown-ing them here
+# lets the non-root user write without a host-side chown. Bind mounts
+# (/runtime, /feed) keep host-side ownership — the compose recipe expects
+# those to be UID 1000 on the host.
+RUN mkdir -p /feed /opt/sdk /opt/repos /app && \
+    chown -R builder:builder /feed /opt/sdk /opt/repos /app
+
+# SSH config for private git repos. Lives in the user home so ssh picks it
+# up without /root access.
+RUN mkdir -p /home/builder/.ssh && \
+    printf "StrictHostKeyChecking no\nUserKnownHostsFile /dev/null\nIdentityFile /runtime/ssh.key\n" \
+        > /home/builder/.ssh/config && \
+    chown -R builder:builder /home/builder/.ssh && \
+    chmod 700 /home/builder/.ssh && \
+    chmod 600 /home/builder/.ssh/config
+
+USER builder
 
 CMD ["python3", "main.py"]

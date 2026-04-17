@@ -11,7 +11,14 @@ services:
 
   app:
     container_name: builder-app
-    build: ./builder
+    build:
+      context: ./builder
+      args:
+        # Override BUILDER_UID/BUILDER_GID via env or an override file when
+        # the host user is not UID 1000; the image rebuilds so
+        # image-owned dirs (/opt/sdk, /opt/repos, /home/builder) match.
+        BUILDER_UID: ${BUILDER_UID:-1000}
+        BUILDER_GID: ${BUILDER_GID:-1000}
     volumes:
       - ./runtime:/runtime
       - ./runtime/feed:/feed
@@ -21,6 +28,11 @@ services:
       - TERM=xterm
       - TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID
+      - HOME=/home/builder
+      - BUILD_LOG_DIR=/runtime/logs
+      # GIT_SSH_COMMAND sidesteps ~/.ssh/config when cloning private repos
+      # — keeps ssh key lookup explicit even if HOME is remapped.
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /runtime/ssh.key
     restart: unless-stopped
 
 volumes:

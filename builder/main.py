@@ -20,10 +20,9 @@ FEED_DIR = "/feed"
 SDK_CACHE_DIR = "/opt/sdk"
 REPO_CACHE_DIR = "/opt/repos"
 STATE_FILE = "/feed/.builder-state.json"
-# /tmp/build-logs is pre-created root-owned by the Dockerfile, so a non-root
-# runtime user cannot write there; override via env to point at a writable
-# bind mount.
-LOG_DIR = os.environ.get("BUILD_LOG_DIR", "/tmp/build-logs")
+# Logs live under the bind-mounted /runtime so host ops can tail them.
+# Override via env in exotic setups (CI, tests, etc.).
+LOG_DIR = os.environ.get("BUILD_LOG_DIR", "/runtime/logs")
 
 HETZNER_TOKEN_PATH = "/runtime/hetzner.token"
 SIGNING_KEY = "/runtime/feed-signing.key"

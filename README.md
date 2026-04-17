@@ -40,6 +40,12 @@ The builder auto-detects how to build each repo (priority order):
 
 ## Setup
 
+The `builder-app` container runs as UID/GID 1000 (baked into the image at
+build time). The bind-mounted `runtime/` and `runtime/feed/` directories
+must be writable by that UID — `chown -R 1000:1000 runtime` once after
+cloning. If your host user is not 1000, override the **build args** (not
+just runtime `user:`) and rebuild — see `docker-compose.override.example.yml`.
+
 ```bash
 # 1. Configure
 cp config.example.yaml runtime/config.yaml
@@ -52,10 +58,13 @@ chmod 600 runtime/ssh.key
 # 3. For remote builds (optional)
 echo "your-hetzner-api-token" > runtime/hetzner.token
 
-# 4. Custom networking (optional)
+# 4. Custom networking / non-default UID (optional)
 cp docker-compose.override.example.yml docker-compose.override.yml
 
-# 5. Run
+# 5. Ensure runtime/ is writable by UID 1000
+sudo chown -R 1000:1000 runtime
+
+# 6. Run
 docker compose build && docker compose up -d
 ```
 

@@ -1,17 +1,31 @@
-# docker-compose.override.yml — per-host overrides (not checked in)
+# docker-compose.override.yml — per-host overrides (not checked in).
 #
-# Example: attach feed-server to an existing macvlan network
-# with a static IP, instead of using the default port mapping.
+# The image already ships as non-root (UID/GID 1000) with sensible env
+# defaults baked in. Use this file only when your host deviates from
+# those defaults — examples below.
 #
-# Copy this to docker-compose.override.yml and adjust to taste.
+# Copy to docker-compose.override.yml and trim to what you actually need.
 
 services:
-  feed-server:
-    ports: !reset []  # remove default port mapping
+  # Example 1 — attach feed server to an existing macvlan/ipvlan network
+  # with a static IP instead of the host port mapping.
+  feeds:
+    ports: !reset []
     networks:
-      - macvlan
+      macvlan:
+        ipv4_address: 192.168.1.9
+
+  # Example 2 — host user is not UID 1000. The UID is a *build* arg because
+  # image-owned dirs (/opt/sdk, /opt/repos, /home/builder) are chown-ed at
+  # build time; changing only the runtime `user:` would leave them
+  # unwritable. Rebuild after changing: `docker compose build app`.
+  app:
+    build:
+      args:
+        BUILDER_UID: "1001"
+        BUILDER_GID: "1001"
 
 networks:
   macvlan:
     external: true
-    name: my-macvlan-network  # adjust to your network name
+    name: my-macvlan-network
