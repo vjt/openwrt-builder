@@ -115,17 +115,19 @@ def test_get_head_commit(repo_dir):
         assert commit == "abc123def"
 
 
-def test_collect_ipk_files(tmp_path):
-    """Test that _collect_ipk_files finds .ipk files in bin/."""
+def test_collect_package_files(tmp_path):
+    """_collect_package_files finds both .ipk (<= 24.10) and .apk (>= 25.12)."""
     bin_dir = tmp_path / "bin" / "packages" / "aarch64_cortex-a53" / "myfeed"
     bin_dir.mkdir(parents=True)
-    (bin_dir / "test-pkg_1.0-1_aarch64_cortex-a53.ipk").touch()
-    (bin_dir / "test-pkg2_1.0-1_aarch64_cortex-a53.ipk").touch()
+    (bin_dir / "ipk-pkg_1.0-1_aarch64_cortex-a53.ipk").touch()
+    (bin_dir / "ipk-pkg2_1.0-1_aarch64_cortex-a53.ipk").touch()
+    (bin_dir / "apk-pkg_1.0-r1_aarch64_cortex-a53.apk").touch()
 
-    from builder import _collect_ipk_files
-    ipks = _collect_ipk_files(str(tmp_path / "bin"))
-    assert len(ipks) == 2
-    assert all(str(p).endswith(".ipk") for p in ipks)
+    from builder import _collect_package_files
+    pkgs = _collect_package_files(str(tmp_path / "bin"))
+    assert len(pkgs) == 3
+    suffixes = {p.suffix for p in pkgs}
+    assert suffixes == {".ipk", ".apk"}
 
 
 # --- Build method detection tests ---

@@ -41,14 +41,12 @@ class RemoteBuilder:
         ssh_key_path: str = "/runtime/ssh.key",
         server_type: str = "cx23",
         location: str = "fsn1",
-        openwrt_version: str = "24.10.0",
     ):
         self.api_token = api_token
         self.ssh_key_name = ssh_key_name
         self.ssh_key_path = ssh_key_path
         self.server_type = server_type
         self.location = location
-        self.openwrt_version = openwrt_version
 
         self._server_name: str | None = None
         self._server_ip: str | None = None
@@ -170,12 +168,12 @@ class RemoteBuilder:
             check=True,
         )
 
-    def setup_sdk(self, target: str, openwrt_version: str | None = None) -> str:
+    def setup_sdk(self, target: str, openwrt_version: str) -> str:
         """Install build deps and download SDK on the remote server.
 
         Returns the remote SDK path.
         """
-        version = openwrt_version or self.openwrt_version
+        version = openwrt_version
         actual_target = target
         if target == "all":
             actual_target = next(iter(TARGET_ARCH_MAP))
@@ -219,19 +217,18 @@ echo "SDK ready at {sdk_path}"
                      actual_target, version)
         return sdk_path
 
-    def _remote_sdk_path(self, target: str, openwrt_version: str | None = None) -> str:
+    def _remote_sdk_path(self, target: str, openwrt_version: str) -> str:
         """Return the expected SDK directory path on the remote server."""
         from sdk import sdk_dirname
-        version = openwrt_version or self.openwrt_version
-        return f"/opt/sdk/{sdk_dirname(version, target)}"
+        return f"/opt/sdk/{sdk_dirname(openwrt_version, target)}"
 
     def build_package(
         self,
         name: str,
         makefile_subdir: str | None,
         target: str,
+        openwrt_version: str,
         sdk_force: bool = False,
-        openwrt_version: str | None = None,
     ) -> list[str]:
         """Build a package on the remote server.
 
@@ -275,10 +272,10 @@ if ! make package/{name}/compile V=s -j$(nproc) {force_flag} > /tmp/build.log 2>
     exit 1
 fi
 
-# List built .ipk files
-echo "===IPK_LIST_START==="
-find {sdk_path}/bin/packages -name '*.ipk' 2>/dev/null || true
-echo "===IPK_LIST_END==="
+# List built package files (.ipk for <= 24.10, .apk for >= 25.12)
+echo "===PKG_LIST_START==="
+find {sdk_path}/bin/packages \\( -name '*.ipk' -o -name '*.apk' \\) 2>/dev/null || true
+echo "===PKG_LIST_END==="
 """
 
         logger.info("Building %s for %s on remote...", name, target)
@@ -301,23 +298,24 @@ echo "===IPK_LIST_END==="
                 f"Remote SDK build failed for {name}:\n{stderr_tail}"
             )
 
-        # Extract .ipk paths from between our markers
         in_list = False
-        ipk_paths = []
+        pkg_paths = []
         for line in result.stdout.splitlines():
-            if line.strip() == "===IPK_LIST_START===":
+            if line.strip() == "===PKG_LIST_START===":
                 in_list = True
                 continue
-            if line.strip() == "===IPK_LIST_END===":
+            if line.strip() == "===PKG_LIST_END===":
                 break
-            if in_list and line.strip().endswith(".ipk"):
-                ipk_paths.append(line.strip())
+            if in_list and (line.strip().endswith(".ipk")
+                            or line.strip().endswith(".apk")):
+                pkg_paths.append(line.strip())
 
-        logger.info("Remote build produced %d .ipk(s) for %s", len(ipk_paths), name)
-        return ipk_paths
+        logger.info("Remote build produced %d package(s) for %s",
+                     len(pkg_paths), name)
+        return pkg_paths
 
     def download_ipks(self, remote_paths: list[str], local_dir: str) -> list[Path]:
-        """Download .ipk files from the remote server to local feed dir."""
+        """Download package files (.ipk or .apk) from remote to local feed dir."""
         local = Path(local_dir)
         local.mkdir(parents=True, exist_ok=True)
         downloaded = []
@@ -330,6 +328,60 @@ echo "===IPK_LIST_END==="
             downloaded.append(local_path)
 
         return downloaded
+
+    def reindex_apk_feed(self, local_dir: str, openwrt_version: str,
+                         target: str) -> Path | None:
+        """Regenerate APKINDEX.tar.gz for an apk feed directory.
+
+        apk-tools 3.x is required and not shipped on Debian; we reuse the apk
+        binary from the OpenWrt SDK (`staging_dir/host/bin/apk`) on the already
+        provisioned Hetzner server. Uploads every .apk in local_dir to the
+        remote, invokes `apk mkndx`, and downloads the produced
+        APKINDEX.tar.gz back. Returns the local index path on success.
+        """
+        local = Path(local_dir)
+        apks = sorted(local.glob("*.apk"))
+        if not apks:
+            return None
+
+        sdk_path = self._remote_sdk_path(
+            target if target != "all" else next(iter(TARGET_ARCH_MAP)),
+            openwrt_version,
+        )
+        apk_bin = f"{sdk_path}/staging_dir/host/bin/apk"
+
+        remote_feed = f"/tmp/apkindex/{local.name}"
+        logger.info("Reindexing apk feed %s (%d apks)", local, len(apks))
+
+        self._ssh_script(f"rm -rf {remote_feed} && mkdir -p {remote_feed}")
+
+        subprocess.run(
+            ["rsync", "-a",
+             "-e", f"ssh {' '.join(SSH_OPTS)} -i {self.ssh_key_path}",
+             *[str(a) for a in apks],
+             f"root@{self._server_ip}:{remote_feed}/"],
+            check=True,
+        )
+
+        index_script = f"""set -e
+cd {remote_feed}
+if [ ! -x {apk_bin} ]; then
+    echo "apk binary missing at {apk_bin}" >&2
+    exit 1
+fi
+{apk_bin} mkndx -o APKINDEX.tar.gz *.apk
+"""
+        result = self._ssh_script(index_script, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"apk mkndx failed for {local_dir}:\n"
+                f"{(result.stdout or '') + (result.stderr or '')}"
+            )
+
+        local_index = local / "APKINDEX.tar.gz"
+        self._scp_from(f"{remote_feed}/APKINDEX.tar.gz", str(local_index))
+        logger.info("apk reindex complete for %s", local)
+        return local_index
 
     def destroy_server(self) -> None:
         """Delete the Hetzner server."""

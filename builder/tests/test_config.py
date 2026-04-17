@@ -34,7 +34,7 @@ def test_load_config_minimal(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok123")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "456")
     config_data = {
-        "openwrt_version": "24.10.0",
+        "openwrt_versions": "24.10.0",
         "default_targets": ["mediatek/filogic"],
         "poll_interval": 3600,
         "telegram": {
@@ -62,7 +62,7 @@ def test_load_config_repo_inherits_default_targets(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
     config_data = {
-        "openwrt_version": "24.10.0",
+        "openwrt_versions": "24.10.0",
         "default_targets": ["mediatek/filogic", "ramips/mt7621"],
         "poll_interval": 3600,
         "telegram": {
@@ -88,7 +88,7 @@ def test_load_config_repo_overrides_targets(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
     config_data = {
-        "openwrt_version": "24.10.0",
+        "openwrt_versions": "24.10.0",
         "default_targets": ["mediatek/filogic", "ramips/mt7621"],
         "poll_interval": 3600,
         "telegram": {
@@ -115,7 +115,7 @@ def test_load_config_validates_unknown_target(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
     config_data = {
-        "openwrt_version": "24.10.0",
+        "openwrt_versions": "24.10.0",
         "default_targets": ["fake/target"],
         "poll_interval": 3600,
         "telegram": {

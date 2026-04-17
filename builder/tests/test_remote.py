@@ -14,7 +14,6 @@ def builder():
         ssh_key_path="/runtime/ssh.key",
         server_type="cx22",
         location="fsn1",
-        openwrt_version="24.10.0",
     )
 
 
@@ -145,18 +144,18 @@ class TestSetupSDK:
 
         with patch.object(builder, "_ssh_script") as mock_ssh:
             mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            path = builder.setup_sdk("mediatek/filogic")
+            path = builder.setup_sdk("mediatek/filogic", "24.10.0")
 
             assert "openwrt-sdk-24.10.0-mediatek-filogic" in path
-            assert "mediatek/filogic" in builder._setup_done
+            assert ("mediatek/filogic", "24.10.0") in builder._setup_done
             mock_ssh.assert_called_once()
 
     def test_setup_sdk_skips_if_done(self, builder):
         builder._server_ip = "1.2.3.4"
-        builder._setup_done.add("mediatek/filogic")
+        builder._setup_done.add(("mediatek/filogic", "24.10.0"))
 
         with patch.object(builder, "_ssh_script") as mock_ssh:
-            builder.setup_sdk("mediatek/filogic")
+            builder.setup_sdk("mediatek/filogic", "24.10.0")
             mock_ssh.assert_not_called()
 
     def test_setup_sdk_all_uses_first_target(self, builder):
@@ -164,24 +163,25 @@ class TestSetupSDK:
 
         with patch.object(builder, "_ssh_script") as mock_ssh:
             mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            path = builder.setup_sdk("all")
+            path = builder.setup_sdk("all", "24.10.0")
 
             # Should use the first target from TARGET_ARCH_MAP
             assert "mediatek-filogic" in path
 
 
 class TestBuildPackage:
-    def test_build_returns_ipk_paths(self, builder):
+    def test_build_returns_package_paths(self, builder):
         builder._server_ip = "1.2.3.4"
-        builder._setup_done.add("mediatek/filogic")
+        builder._setup_done.add(("mediatek/filogic", "24.10.0"))
 
         with patch.object(builder, "_ssh_script") as mock_ssh:
             mock_ssh.return_value = MagicMock(
                 returncode=0,
                 stdout=(
-                    "===IPK_LIST_START===\n"
+                    "===PKG_LIST_START===\n"
                     "/opt/sdk/xxx/bin/packages/aarch64/base/test-pkg_1.0_all.ipk\n"
-                    "===IPK_LIST_END===\n"
+                    "/opt/sdk/xxx/bin/packages/aarch64/base/test-pkg_1.0_all.apk\n"
+                    "===PKG_LIST_END===\n"
                 ),
                 stderr="",
             )
@@ -189,14 +189,16 @@ class TestBuildPackage:
                 name="test-pkg",
                 makefile_subdir=None,
                 target="mediatek/filogic",
+                openwrt_version="24.10.0",
             )
 
-            assert len(paths) == 1
-            assert paths[0].endswith(".ipk")
+            assert len(paths) == 2
+            assert any(p.endswith(".ipk") for p in paths)
+            assert any(p.endswith(".apk") for p in paths)
 
     def test_build_raises_on_failure(self, builder):
         builder._server_ip = "1.2.3.4"
-        builder._setup_done.add("mediatek/filogic")
+        builder._setup_done.add(("mediatek/filogic", "24.10.0"))
 
         with patch.object(builder, "_ssh_script") as mock_ssh:
             mock_ssh.return_value = MagicMock(
@@ -209,6 +211,7 @@ class TestBuildPackage:
                     name="test-pkg",
                     makefile_subdir=None,
                     target="mediatek/filogic",
+                    openwrt_version="24.10.0",
                 )
 
 

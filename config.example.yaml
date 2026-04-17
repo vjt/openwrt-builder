@@ -1,4 +1,7 @@
-openwrt_version: "24.10.0"
+# Default OpenWrt SDK version(s). Accepts a single string or a list. Each repo
+# builds once per version in its own list (or this default). Versions differ
+# by package format: <= 24.10 emits .ipk, >= 25.12 emits .apk.
+openwrt_versions: "24.10.0"
 
 default_targets:
   - mediatek/filogic       # covers MT7981, MT7986, MT7988
@@ -30,3 +33,9 @@ repos:
     url: git@github.com:you/my-c-package.git
     branch: main
     # inherits default_targets
+
+  - name: dual-version-package
+    url: git@github.com:you/dual-version-package.git
+    branch: main
+    openwrt_versions: ["24.10.0", "25.12.0"]
+    targets: [all]

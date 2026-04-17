@@ -17,9 +17,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _collect_ipk_files(bin_dir: str) -> list[Path]:
-    """Recursively find all .ipk files under a directory."""
-    return list(Path(bin_dir).rglob("*.ipk"))
+PKG_EXTENSIONS = ("*.ipk", "*.apk")
+
+
+def _collect_package_files(bin_dir: str) -> list[Path]:
+    """Recursively find all package files (.ipk or .apk) under a directory."""
+    base = Path(bin_dir)
+    return [p for ext in PKG_EXTENSIONS for p in base.rglob(ext)]
 
 
 def _is_openwrt_makefile(path: Path) -> bool:
@@ -32,13 +36,17 @@ def _is_openwrt_makefile(path: Path) -> bool:
 
 
 def reindex_feed(feed_arch_dir: str):
-    """Regenerate Packages and Packages.gz in a feed architecture directory."""
-    logger.info("Reindexing %s", feed_arch_dir)
+    """Regenerate the opkg (ipk) Packages index in a feed arch directory.
+
+    The apk (OpenWrt >= 25.12) feed index is regenerated remotely on the
+    Hetzner builder because apk-tools is not packaged on Debian — see
+    RemoteBuilder.reindex_apk_feed.
+    """
     feed_path = Path(feed_arch_dir)
     if not any(feed_path.glob("*.ipk")):
-        logger.info("No .ipk files in %s, skipping reindex", feed_arch_dir)
         return
 
+    logger.info("Reindexing ipk feed %s", feed_arch_dir)
     try:
         subprocess.run(
             ["opkg-make-index", str(feed_path)],
@@ -247,16 +255,16 @@ class PackageBuilder:
 
     def _collect_and_copy(self, search_dir: Path, dest_dir: Path,
                           name_filter: str | None = None) -> list[Path]:
-        """Find .ipk files under search_dir and copy them to dest_dir."""
-        ipks = _collect_ipk_files(str(search_dir))
+        """Find .ipk / .apk files under search_dir and copy them to dest_dir."""
+        pkgs = _collect_package_files(str(search_dir))
         copied = []
-        for ipk in ipks:
-            if name_filter and name_filter not in ipk.name:
+        for pkg in pkgs:
+            if name_filter and name_filter not in pkg.name:
                 continue
-            dest = dest_dir / ipk.name
-            shutil.copy2(str(ipk), str(dest))
+            dest = dest_dir / pkg.name
+            shutil.copy2(str(pkg), str(dest))
             copied.append(dest)
-            logger.info("Copied %s to %s", ipk.name, dest_dir)
+            logger.info("Copied %s to %s", pkg.name, dest_dir)
         return copied
 
     def _build_with_script(self, target: str) -> list[Path]:
@@ -406,13 +414,19 @@ class PackageBuilder:
         )
 
     async def build_all_targets(self) -> dict[str, list[Path]]:
-        """Build for all configured targets. Returns {target: [ipk_paths]}."""
+        """Build for all configured targets.
+
+        Returns {target: [package_paths]} — paths may be .ipk or .apk depending
+        on the OpenWrt version used. The caller is responsible for reindexing
+        the apk side (see RemoteBuilder.reindex_apk_feed); we reindex ipk here
+        because that only needs `opkg-make-index` or the tarball fallback.
+        """
         results = {}
         modified_dirs = set()
 
         for target in self.targets:
-            ipks = await self.build_for_target(target)
-            results[target] = ipks
+            pkgs = await self.build_for_target(target)
+            results[target] = pkgs
             modified_dirs.add(str(self._get_arch_dir(target)))
 
         for d in modified_dirs:

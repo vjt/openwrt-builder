@@ -33,12 +33,28 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("openwrt-builder")
 
 
+def _state_key(name: str, version: str) -> str:
+    """State/log key per (repo, openwrt version) so each matrix entry tracks
+    independently — a successful 24.10 build shouldn't mask a 25.12 failure."""
+    return f"{name}@{version}"
+
+
+def _needs_apk_indexing(pkgs: list[Path]) -> bool:
+    return any(p.suffix == ".apk" for p in pkgs)
+
+
 async def run_build_cycle(config: dict[str, Any], state: StateManager,
                     sdk_mgrs: dict[str, SDKManager],
                     bot: OpenwrtBot | None = None, force_repo: str | None = None,
                     remote_builder: RemoteBuilder | None = None,
                     signing_key: str | None = None) -> None:
-    """Run one build cycle across all repos (or a specific one)."""
+    """Run one build cycle across all (repo, openwrt_version) combinations.
+
+    Feed arch directories touched by apk builds get a post-cycle reindex via
+    the Hetzner server — we collect them here, then run the reindex step once
+    after every repo is done so we pay the rsync/ssh roundtrip per arch, not
+    per repo.
+    """
     repos = config["repos"]
     if force_repo and force_repo != "all":
         repos = [r for r in repos if r["name"] == force_repo]
@@ -46,90 +62,111 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
             logger.error("Unknown repo: %s", force_repo)
             return
 
+    apk_dirs_to_reindex: dict[str, tuple[str, str]] = {}
+
     for repo_config in repos:
         name = repo_config["name"]
-        log_file = Path(LOG_DIR) / f"{name}.log"
-        log_file.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            pb = PackageBuilder(
-                repo_config=repo_config,
-                repo_cache_dir=REPO_CACHE_DIR,
-                feed_dir=FEED_DIR,
-                sdk_managers=sdk_mgrs,
-                sdk_force=config.get("sdk_force", False),
-                remote_builder=remote_builder,
-                bot=bot,
-                signing_key=signing_key,
-            )
+        for version in repo_config["openwrt_versions"]:
+            per_version_config = {**repo_config, "openwrt_version": version}
+            key = _state_key(name, version)
+            log_file = Path(LOG_DIR) / f"{key}.log"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
 
-            pb.clone_or_fetch()
-            commit = pb.get_head_commit()
-
-            if not state.has_changed(name, commit) and force_repo is None:
-                logger.info("No changes for %s (at %s), skipping", name, commit[:7])
-                continue
-
-            logger.info("Building %s (commit %s)", name, commit[:7])
-            if bot:
-                await bot.notify_build_start(name, commit)
-            results = await pb.build_all_targets()
-
-            total_ipks = sum(len(v) for v in results.values())
-            logger.info("Built %d .ipk files for %s", total_ipks, name)
-
-            prev_repo = state.get_repo(name)
-            was_failed = (
-                prev_repo is not None
-                and prev_repo.get("status") == "failed"
-            )
-
-            state.record_success(name, commit)
-
-            if was_failed and bot:
-                await bot.notify_recovery(name)
-            if bot:
-                await bot.notify_build_success(name, commit, total_ipks)
-
-            log_file.write_text(
-                f"Build successful at {datetime.now(timezone.utc).isoformat()}\n"
-                f"Commit: {commit}\n"
-                f"Packages: {total_ipks}\n"
-            )
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("Build failed for %s: %s", name, error_msg)
-
-            log_file.write_text(
-                f"Build FAILED at {datetime.now(timezone.utc).isoformat()}\n"
-                f"Error: {error_msg}\n"
-            )
-
-            commit = "unknown"
             try:
-                pb2 = PackageBuilder(
-                    repo_config=repo_config,
+                pb = PackageBuilder(
+                    repo_config=per_version_config,
                     repo_cache_dir=REPO_CACHE_DIR,
                     feed_dir=FEED_DIR,
                     sdk_managers=sdk_mgrs,
+                    sdk_force=config.get("sdk_force", False),
+                    remote_builder=remote_builder,
+                    bot=bot,
+                    signing_key=signing_key,
                 )
-                commit = pb2.get_head_commit()
-            except Exception:
-                pass
 
-            prev = state.get_repo(name)
-            already_notified = (
-                force_repo is None
-                and prev is not None
-                and prev.get("status") == "failed"
-                and prev.get("notified", False)
-            )
+                pb.clone_or_fetch()
+                commit = pb.get_head_commit()
 
-            state.record_failure(name, commit, error_msg)
+                if not state.has_changed(key, commit) and force_repo is None:
+                    logger.info("No changes for %s (at %s), skipping",
+                                key, commit[:7])
+                    continue
 
-            if not already_notified and bot:
-                await bot.notify_failure(name, error_msg)
+                logger.info("Building %s (commit %s)", key, commit[:7])
+                if bot:
+                    await bot.notify_build_start(key, commit)
+                results = await pb.build_all_targets()
+
+                total_pkgs = sum(len(v) for v in results.values())
+                logger.info("Built %d package(s) for %s", total_pkgs, key)
+
+                for target, pkgs in results.items():
+                    if _needs_apk_indexing(pkgs):
+                        arch_dir = str(pb._get_arch_dir(target))
+                        apk_dirs_to_reindex[arch_dir] = (version, target)
+
+                prev_repo = state.get_repo(key)
+                was_failed = (
+                    prev_repo is not None
+                    and prev_repo.get("status") == "failed"
+                )
+
+                state.record_success(key, commit)
+
+                if was_failed and bot:
+                    await bot.notify_recovery(key)
+                if bot:
+                    await bot.notify_build_success(key, commit, total_pkgs)
+
+                log_file.write_text(
+                    f"Build successful at {datetime.now(timezone.utc).isoformat()}\n"
+                    f"Commit: {commit}\n"
+                    f"Packages: {total_pkgs}\n"
+                )
+
+            except Exception as e:
+                error_msg = str(e)
+                logger.error("Build failed for %s: %s", key, error_msg)
+
+                log_file.write_text(
+                    f"Build FAILED at {datetime.now(timezone.utc).isoformat()}\n"
+                    f"Error: {error_msg}\n"
+                )
+
+                commit = "unknown"
+                try:
+                    pb2 = PackageBuilder(
+                        repo_config=per_version_config,
+                        repo_cache_dir=REPO_CACHE_DIR,
+                        feed_dir=FEED_DIR,
+                        sdk_managers=sdk_mgrs,
+                    )
+                    commit = pb2.get_head_commit()
+                except Exception:
+                    pass
+
+                prev = state.get_repo(key)
+                already_notified = (
+                    force_repo is None
+                    and prev is not None
+                    and prev.get("status") == "failed"
+                    and prev.get("notified", False)
+                )
+
+                state.record_failure(key, commit, error_msg)
+
+                if not already_notified and bot:
+                    await bot.notify_failure(key, error_msg)
+
+    # Reindex apk feeds once per touched arch dir. The Hetzner server is still
+    # up at this point — the outer loop destroys it after this returns.
+    if apk_dirs_to_reindex and remote_builder:
+        for arch_dir, (version, target) in apk_dirs_to_reindex.items():
+            try:
+                remote_builder.reindex_apk_feed(arch_dir, version, target)
+            except Exception as e:
+                logger.error("apk reindex failed for %s: %s", arch_dir, e)
 
     if bot:
         bot.last_poll = datetime.now(timezone.utc).isoformat()
@@ -161,11 +198,10 @@ async def main():
     config = load_config(CONFIG_PATH)
     state = StateManager(STATE_FILE)
 
-    # Build an SDKManager per distinct openwrt_version across global + repos.
-    # Repos without an explicit override inherit config["openwrt_version"].
-    versions_needed: set[str] = {config["openwrt_version"]}
+    # Build an SDKManager per distinct openwrt version across all repos.
+    versions_needed: set[str] = set(config["openwrt_versions"])
     for repo in config.get("repos", []):
-        versions_needed.add(repo["openwrt_version"])
+        versions_needed.update(repo["openwrt_versions"])
     sdk_mgrs: dict[str, SDKManager] = {
         v: SDKManager(v, SDK_CACHE_DIR) for v in versions_needed
     }
@@ -202,7 +238,6 @@ async def main():
                 ssh_key_name=hetzner_config.get("ssh_key_name", "openwrt-builder"),
                 server_type=hetzner_config.get("server_type", "cx22"),
                 location=hetzner_config.get("location", "fsn1"),
-                openwrt_version=config["openwrt_version"],
             )
             logger.info("Hetzner remote builder configured (%s in %s)",
                          remote_builder.server_type, remote_builder.location)
@@ -216,27 +251,24 @@ async def main():
     if not remote_builder:
         logger.info("Ensuring SDKs are downloaded...")
 
-        # Collect (version, target) pairs actually needed by the repo set.
         version_targets: dict[str, set[str]] = {}
         for repo in config.get("repos", []):
-            v = repo["openwrt_version"]
-            for t in repo.get("targets", []):
-                if t == "all":
-                    continue
-                version_targets.setdefault(v, set()).add(t)
+            for v in repo["openwrt_versions"]:
+                for t in repo.get("targets", []):
+                    if t == "all":
+                        continue
+                    version_targets.setdefault(v, set()).add(t)
 
-        # Fall back to default_targets under the global version if no repos.
         if not version_targets:
-            default_v = config["openwrt_version"]
-            version_targets[default_v] = {
-                t for t in config["default_targets"] if t != "all"
-            }
+            for default_v in config["openwrt_versions"]:
+                version_targets[default_v] = {
+                    t for t in config["default_targets"] if t != "all"
+                }
 
         for version, targets in version_targets.items():
             mgr = sdk_mgrs[version]
             for target in targets:
                 mgr.ensure_downloaded(target)
-            # Ensure at least one SDK per version for arch-independent builds
             if not targets and all(
                 mgr.needs_download(t) for t in TARGET_ARCH_MAP
             ):

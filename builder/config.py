@@ -43,6 +43,19 @@ def _resolve_recursive(obj: Any) -> Any:
     return obj
 
 
+def _normalize_versions(value: Any, ctx: str) -> list[str]:
+    """Accept either a single string or a list of strings; return a list."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list) and all(isinstance(v, str) for v in value):
+        if not value:
+            raise ValueError(f"{ctx}: openwrt_versions must not be empty")
+        return list(value)
+    raise ValueError(
+        f"{ctx}: openwrt_versions must be a string or list of strings"
+    )
+
+
 def load_config(path: str) -> dict[str, Any]:
     """Load and validate the builder config file."""
     with open(path) as f:
@@ -51,27 +64,28 @@ def load_config(path: str) -> dict[str, Any]:
     config = _resolve_recursive(raw)
 
     default_targets = config.get("default_targets", [])
-    default_version = config.get("openwrt_version")
 
-    # Validate default targets
+    if "openwrt_versions" not in config:
+        raise ValueError("Top-level openwrt_versions is required")
+    default_versions = _normalize_versions(
+        config["openwrt_versions"], "top-level"
+    )
+    config["openwrt_versions"] = default_versions
+
     for t in default_targets:
         if t not in VALID_TARGETS:
             raise ValueError(f"Unknown target: {t}")
 
-    # Fill in repo defaults
     for repo in config.get("repos", []):
         if "targets" not in repo:
             repo["targets"] = list(default_targets)
-        # Validate repo targets
         for t in repo["targets"]:
             if t not in VALID_TARGETS:
                 raise ValueError(f"Unknown target: {t}")
-        # Per-repo openwrt_version override (falls back to global)
-        if "openwrt_version" not in repo:
-            repo["openwrt_version"] = default_version
-        if not isinstance(repo["openwrt_version"], str):
-            raise ValueError(
-                f"Repo {repo.get('name')!r}: openwrt_version must be a string"
-            )
+
+        versions_value = repo.get("openwrt_versions", default_versions)
+        repo["openwrt_versions"] = _normalize_versions(
+            versions_value, f"repo {repo.get('name')!r}"
+        )
 
     return config
