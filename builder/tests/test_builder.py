@@ -162,6 +162,35 @@ def test_detect_openwrt_makefile_in_subdir(repo_dir):
     assert makefile_dir == openwrt_dir
 
 
+def test_detect_openwrt_makefile_in_feed_layout(repo_dir):
+    """Blessed src-link feed layout: <repo>/openwrt/<pkgname>/Makefile."""
+    pb, pkg_dir = _make_builder(repo_dir)
+    feed_pkg_dir = pkg_dir / "openwrt" / "my-package"
+    feed_pkg_dir.mkdir(parents=True)
+    (feed_pkg_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
+
+    method, makefile_dir = pb._detect_build_method()
+    assert method == "sdk"
+    assert makefile_dir == feed_pkg_dir
+
+
+def test_detect_openwrt_legacy_beats_feed_layout(repo_dir):
+    """If both <repo>/openwrt/Makefile and <repo>/openwrt/<pkg>/Makefile exist,
+    prefer the legacy top-level one (keeps single-package repos deterministic
+    when someone accidentally adds an unrelated subdir)."""
+    pb, pkg_dir = _make_builder(repo_dir)
+    openwrt_dir = pkg_dir / "openwrt"
+    openwrt_dir.mkdir()
+    (openwrt_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
+    sub_dir = openwrt_dir / "extra"
+    sub_dir.mkdir()
+    (sub_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
+
+    method, makefile_dir = pb._detect_build_method()
+    assert method == "sdk"
+    assert makefile_dir == openwrt_dir
+
+
 def test_detect_build_script(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
     (pkg_dir / "build-ipk.sh").write_text("#!/bin/bash\necho hi\n")

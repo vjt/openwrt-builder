@@ -212,9 +212,22 @@ class PackageBuilder:
 
         Returns (method, makefile_dir) where method is one of:
           "sdk", "script", "opkg-build", "skip"
+
+        SDK Makefile lookup order:
+          1. <repo>/Makefile                — single-package repo at root
+          2. <repo>/openwrt/Makefile        — legacy layout (single package)
+          3. <repo>/openwrt/<pkgname>/Makefile — blessed src-link feed layout
         """
-        for candidate in [self.repo_dir / "Makefile",
-                          self.repo_dir / "openwrt" / "Makefile"]:
+        candidates = [self.repo_dir / "Makefile",
+                      self.repo_dir / "openwrt" / "Makefile"]
+
+        openwrt_dir = self.repo_dir / "openwrt"
+        if openwrt_dir.is_dir():
+            for subdir in sorted(openwrt_dir.iterdir()):
+                if subdir.is_dir():
+                    candidates.append(subdir / "Makefile")
+
+        for candidate in candidates:
             if candidate.exists() and _is_openwrt_makefile(candidate):
                 return ("sdk", candidate.parent)
 
