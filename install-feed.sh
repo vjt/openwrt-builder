@@ -4,11 +4,7 @@ set -euo pipefail
 # Install the custom opkg feed and package on OpenWrt APs.
 #
 # Usage:
-#   ./install-feed.sh                  # install on all APs from config
-#   ./install-feed.sh golem pingu      # install on specific APs
-#
-# APs default to those listed in config.yaml (requires yq) or can be
-# passed as arguments.
+#   ./install-feed.sh golem albert pingu gordon mowgli
 
 FEED_URL="http://opkg.bad.ass/all"
 FEED_LINE="src/gz custom $FEED_URL"

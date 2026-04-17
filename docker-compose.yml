@@ -1,5 +1,6 @@
 services:
-  feed-server:
+  feeds:
+    container_name: builder-feeds
     image: nginx:alpine
     volumes:
       - ./runtime/feed:/feed:ro
@@ -8,7 +9,8 @@ services:
       - "8081:80"
     restart: unless-stopped
 
-  builder:
+  app:
+    container_name: builder-app
     build: ./builder
     volumes:
       - ./runtime:/runtime
