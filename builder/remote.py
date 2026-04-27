@@ -309,11 +309,17 @@ echo "SDK ready at {sdk_path}"
         target: str,
         openwrt_version: str,
         sdk_force: bool = False,
+        pre_compile_deps: list[str] | None = None,
     ) -> list[str]:
         """Build a package on the remote server.
 
         Expects the source to already be synced to /tmp/src/{name} via sync_repo().
         Returns list of remote .ipk paths.
+
+        `pre_compile_deps` are feed-package names whose
+        `make package/<dep>/compile` runs before the main package compile,
+        so their staged headers/.so files are present when this package's
+        Build/Compile invokes the cross-compiler.
         """
         actual_target = target
         if target == "all":
@@ -329,6 +335,9 @@ echo "SDK ready at {sdk_path}"
             link_target = source_dir
 
         force_flag = "FORCE=1" if sdk_force else ""
+        pre_compile_targets = " ".join(
+            f"package/{d}/compile" for d in (pre_compile_deps or [])
+        )
 
         build_script = f"""set -e
 # Symlink into SDK
@@ -340,9 +349,29 @@ rm -rf {sdk_path}/bin/packages
 
 cd {sdk_path}
 
+# When pre_compile_deps is set we depend on packages from upstream feeds
+# (libmbim, glib2, …). Make sure feeds are populated so those targets
+# resolve to a Makefile under package/feeds/<feed>/<pkg>.
+if [ -n "{pre_compile_targets}" ]; then
+    if [ ! -f feeds.conf ] && [ -f feeds.conf.default ]; then
+        cp feeds.conf.default feeds.conf
+    fi
+    ./scripts/feeds update -a > /tmp/feeds-update.log 2>&1
+    ./scripts/feeds install -a > /tmp/feeds-install.log 2>&1 || true
+fi
+
 # Ensure .config exists
 if [ ! -f .config ]; then
     make defconfig {force_flag} > /dev/null 2>&1
+fi
+
+# Compile feed dependencies first so their headers/.so are staged.
+if [ -n "{pre_compile_targets}" ]; then
+    if ! make {pre_compile_targets} V=s -j$(nproc) {force_flag} > /tmp/precompile.log 2>&1; then
+        echo "===PRECOMPILE_FAILED==="
+        tail -200 /tmp/precompile.log
+        exit 1
+    fi
 fi
 
 # Build (capture output to file for error reporting)

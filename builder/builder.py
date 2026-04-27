@@ -425,6 +425,7 @@ class PackageBuilder:
                 target=target,
                 sdk_force=self.sdk_force,
                 openwrt_version=self.openwrt_version,
+                pre_compile_deps=self.pre_compile_deps,
             )
 
         return self.remote_builder.download_ipks(remote_ipks, str(arch_dir))
