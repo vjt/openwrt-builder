@@ -44,14 +44,22 @@ def format_status_message(state_data: dict[str, Any], last_poll: str | None) -> 
 
 
 def format_list_message(repos: list[dict[str, Any]], state_data: dict[str, Any]) -> str:
-    """Format the /list response."""
+    """Format the /list response.
+
+    State keys are `name@openwrt_version` (see _state_key in main.py) so a
+    24.10 success doesn't mask a 25.12 failure. Lookup must match.
+    """
     lines = []
     for repo in repos:
         name = repo["name"]
         branch = repo["branch"]
-        state = state_data.get(name, {})
-        commit = state.get("last_commit", "not built")[:7] if state else "not built"
-        lines.append(f"  {name} ({branch}) @ {commit}")
+        versions = repo.get("openwrt_versions") or [None]
+        for version in versions:
+            key = f"{name}@{version}" if version else name
+            state = state_data.get(key, {})
+            commit = state.get("last_commit", "not built")[:7] if state else "not built"
+            label = f"{name}@{version}" if version else name
+            lines.append(f"  {label} ({branch}) @ {commit}")
     return "\n".join(lines) if lines else "No repos configured."
 
 

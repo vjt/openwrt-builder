@@ -32,13 +32,19 @@ def test_format_status_message_with_repos():
 
 def test_format_list_message():
     repos = [
-        {"name": "pkg-a", "url": "https://github.com/test/a.git", "branch": "main"},
-        {"name": "pkg-b", "url": "https://github.com/test/b.git", "branch": "dev"},
+        {"name": "pkg-a", "url": "https://github.com/test/a.git",
+         "branch": "main", "openwrt_versions": ["25.12.0"]},
+        {"name": "pkg-b", "url": "https://github.com/test/b.git",
+         "branch": "dev", "openwrt_versions": ["24.10.0", "25.12.0"]},
     ]
     state_data = {
-        "pkg-a": {"last_commit": "abc1234567890"},
+        "pkg-a@25.12.0": {"last_commit": "abc1234567890"},
+        "pkg-b@24.10.0": {"last_commit": "def4567890123"},
     }
     msg = format_list_message(repos, state_data)
-    assert "pkg-a" in msg
-    assert "pkg-b" in msg
+    assert "pkg-a@25.12.0" in msg
+    assert "pkg-b@24.10.0" in msg
+    assert "pkg-b@25.12.0" in msg
     assert "abc1234" in msg
+    assert "def4567" in msg
+    assert "not built" in msg  # pkg-b@25.12.0 missing
