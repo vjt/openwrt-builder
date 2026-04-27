@@ -30,12 +30,28 @@ REMOTE_DEPS = (
 SSH_WAIT_TIMEOUT = 300
 SSH_WAIT_INTERVAL = 5
 
+# ServerAliveInterval/CountMax: when the remote drops dead (kernel panic,
+# network blackhole, build that wedges sshd) the ssh client otherwise sits
+# in poll() forever and the entire build cycle stalls. With these in place
+# the client tears down the connection 90s after the remote stops
+# answering keepalives, the build raises, and the finally: in main.py
+# destroys the server.
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=no",
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "LogLevel=ERROR",
     "-o", "ConnectTimeout=10",
+    "-o", "ServerAliveInterval=30",
+    "-o", "ServerAliveCountMax=3",
+    "-o", "TCPKeepAlive=yes",
 ]
+
+# Hard ceiling on a single _ssh_script invocation. The longest legitimate
+# script we run is the SDK feed build (full feeds update + per-package
+# compile), which on cx23 stays under ~25 min even for android-tools.
+# 60 min gives headroom for slower mirrors / cold caches; if we're past
+# that the remote is wedged and we want to fail loudly.
+SSH_SCRIPT_TIMEOUT_SEC = 3600
 
 
 class RemoteBuilder:
@@ -81,12 +97,18 @@ class RemoteBuilder:
         if not self._server_ip:
             raise RuntimeError("No server running — call ensure_server() first")
 
+        # errors="replace" guards against stray non-UTF-8 bytes from the
+        # remote (gcc/ninja sometimes emit raw object-file fragments via
+        # diagnostics). Without it, communicate() raises UnicodeDecodeError
+        # mid-drain and the subprocess can be left holding the channel open.
         return subprocess.run(
             ["ssh", *SSH_OPTS, "-i", self.ssh_key_path,
              f"root@{self._server_ip}", "bash", "-s"],
             input=script,
             capture_output=True,
             text=True,
+            errors="replace",
+            timeout=SSH_SCRIPT_TIMEOUT_SEC,
             check=check,
         )
 
@@ -100,6 +122,8 @@ class RemoteBuilder:
              f"root@{self._server_ip}", *cmd],
             capture_output=True,
             text=True,
+            errors="replace",
+            timeout=SSH_SCRIPT_TIMEOUT_SEC,
             check=check,
         )
 
