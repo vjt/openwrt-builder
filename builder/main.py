@@ -348,6 +348,7 @@ async def main():
         await app.start()
         assert app.updater is not None
         await app.updater.start_polling()
+        await bot.register_commands()
         logger.info("Telegram bot started")
 
     poll_interval = config.get("poll_interval", 3600)

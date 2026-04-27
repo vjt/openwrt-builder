@@ -208,11 +208,16 @@ class OpenwrtBot:
         self.app.add_handler(CommandHandler("logs", self.cmd_logs))
         return self.app
 
-    async def _post_init(self, application: Application) -> None:
-        """Register bot commands for Telegram autocompletion."""
+    async def register_commands(self) -> None:
+        """Register bot commands for Telegram autocompletion. Called explicitly
+        from main.py after the bot is up — Application.post_init was unreliable
+        in our v20 setup, leaving the autocomplete empty."""
+        if not self.app:
+            logger.warning("register_commands called before build_application")
+            return
         logger.info("Registering Telegram bot commands")
         try:
-            await application.bot.set_my_commands([
+            await self.app.bot.set_my_commands([
                 BotCommand("status", "Show build status for all repos"),
                 BotCommand("list",   "List configured repos and their last commits"),
                 BotCommand("rebuild","Rebuild a repo: /rebuild <name|all>"),
@@ -221,3 +226,8 @@ class OpenwrtBot:
             logger.info("Telegram bot commands registered")
         except Exception:
             logger.exception("Failed to register Telegram bot commands")
+
+    async def _post_init(self, application: Application) -> None:  # noqa: ARG002
+        # Kept for compatibility; real registration runs from main via
+        # register_commands() — see comment above.
+        pass
