@@ -150,11 +150,15 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
                     pass
 
                 prev = state.get_repo(key)
+                # Only suppress the notification when both the failure status
+                # AND the error message are unchanged from the previous cycle
+                # — a new error string is itself useful new information.
                 already_notified = (
                     force_repo is None
                     and prev is not None
                     and prev.get("status") == "failed"
                     and prev.get("notified", False)
+                    and prev.get("error") == error_msg
                 )
 
                 state.record_failure(key, commit, error_msg)
