@@ -354,6 +354,104 @@ echo "===PKG_LIST_END==="
                      len(pkg_paths), name)
         return pkg_paths
 
+    def build_packages_via_feed(
+        self,
+        name: str,
+        feed_subdir: str,
+        pkg_names: list[str],
+        target: str,
+        openwrt_version: str,
+        sdk_force: bool = False,
+    ) -> list[str]:
+        """Build a multi-package repo by registering its openwrt/ as a
+        `src-link` custom feed in the remote SDK and compiling each package.
+        Returns list of remote .ipk/.apk paths.
+        """
+        if not pkg_names:
+            raise ValueError("pkg_names must be non-empty for feed builds")
+
+        actual_target = target
+        if target == "all":
+            actual_target = next(iter(TARGET_ARCH_MAP))
+
+        sdk_path = self.setup_sdk(actual_target, openwrt_version=openwrt_version)
+
+        source_dir = f"/tmp/src/{name}"
+        feed_root = f"{source_dir}/{feed_subdir}"
+        force_flag = "FORCE=1" if sdk_force else ""
+        compile_targets = " ".join(f"package/{p}/compile" for p in pkg_names)
+
+        # Quote the feed line so a path with spaces wouldn't tokenize wrong.
+        # OpenWrt's scripts/feeds tolerates a missing trailing newline; be safe.
+        build_script = f"""set -e
+cd {sdk_path}
+
+# Seed feeds.conf from feeds.conf.default if absent, then add our src-link
+# entry idempotently so re-runs (force rebuild, retries) don't pile up.
+if [ ! -f feeds.conf ] && [ -f feeds.conf.default ]; then
+    cp feeds.conf.default feeds.conf
+fi
+grep -v '^src-link {name} ' feeds.conf > feeds.conf.new || true
+echo 'src-link {name} {feed_root}' >> feeds.conf.new
+mv feeds.conf.new feeds.conf
+
+./scripts/feeds update {name}
+./scripts/feeds install -p {name} -a
+
+# Clean previous build output so we only collect this run's packages
+rm -rf {sdk_path}/bin/packages
+
+if [ ! -f .config ]; then
+    make defconfig {force_flag} > /dev/null 2>&1
+fi
+
+if ! make {compile_targets} V=s -j$(nproc) {force_flag} > /tmp/build.log 2>&1; then
+    echo "===BUILD_FAILED==="
+    tail -50 /tmp/build.log
+    exit 1
+fi
+
+echo "===PKG_LIST_START==="
+find {sdk_path}/bin/packages \\( -name '*.ipk' -o -name '*.apk' \\) 2>/dev/null || true
+echo "===PKG_LIST_END==="
+"""
+
+        logger.info("Building %s on remote via custom feed (%d package(s))",
+                     name, len(pkg_names))
+        result = self._ssh_script(build_script, check=False)
+
+        if result.returncode != 0:
+            all_output = (result.stdout or "") + (result.stderr or "")
+            error_lines = [
+                line for line in all_output.splitlines()
+                if line.strip()
+                and not line.startswith("make[")
+                and not line.startswith("make:")
+                and not line.startswith("Checking ")
+                and not line.startswith("WARNING:")
+                and "warning:" not in line
+            ]
+            stderr_tail = "\n".join(error_lines[-30:])
+            raise RuntimeError(
+                f"Remote SDK build failed for {name}:\n{stderr_tail}"
+            )
+
+        in_list = False
+        pkg_paths = []
+        for line in result.stdout.splitlines():
+            if line.strip() == "===PKG_LIST_START===":
+                in_list = True
+                continue
+            if line.strip() == "===PKG_LIST_END===":
+                break
+            if in_list and (line.strip().endswith(".ipk")
+                            or line.strip().endswith(".apk")):
+                pkg_paths.append(line.strip())
+
+        logger.info("Remote feed build produced %d package file(s) for %s",
+                     len(pkg_paths), name)
+        return pkg_paths
+
     def download_ipks(self, remote_paths: list[str], local_dir: str) -> list[Path]:
         """Download package files (.ipk or .apk) from remote to local feed dir."""
         local = Path(local_dir)

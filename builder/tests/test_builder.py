@@ -148,7 +148,7 @@ def test_detect_openwrt_makefile_at_root(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
     (pkg_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "sdk"
     assert makefile_dir == pkg_dir
 
@@ -159,7 +159,7 @@ def test_detect_openwrt_makefile_in_subdir(repo_dir):
     openwrt_dir.mkdir()
     (openwrt_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "sdk"
     assert makefile_dir == openwrt_dir
 
@@ -171,7 +171,7 @@ def test_detect_openwrt_makefile_in_feed_layout(repo_dir):
     feed_pkg_dir.mkdir(parents=True)
     (feed_pkg_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "sdk"
     assert makefile_dir == feed_pkg_dir
 
@@ -188,16 +188,36 @@ def test_detect_openwrt_legacy_beats_feed_layout(repo_dir):
     sub_dir.mkdir()
     (sub_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "sdk"
     assert makefile_dir == openwrt_dir
+
+
+def test_detect_multi_package_uses_feed_layout(repo_dir):
+    """openwrt/<pkgA>/Makefile + openwrt/<pkgB>/Makefile (no top-level
+    Makefile) → sdk-feed mode with both PKG_NAMEs."""
+    pb, pkg_dir = _make_builder(repo_dir)
+    openwrt_dir = pkg_dir / "openwrt"
+    (openwrt_dir / "alpha").mkdir(parents=True)
+    (openwrt_dir / "alpha" / "Makefile").write_text(
+        OPENWRT_MAKEFILE.replace("test-pkg", "alpha")
+    )
+    (openwrt_dir / "beta").mkdir()
+    (openwrt_dir / "beta" / "Makefile").write_text(
+        OPENWRT_MAKEFILE.replace("test-pkg", "beta")
+    )
+
+    method, source, pkg_names = pb._detect_build_method()
+    assert method == "sdk-feed"
+    assert source == openwrt_dir
+    assert sorted(pkg_names) == ["alpha", "beta"]
 
 
 def test_detect_build_script(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
     (pkg_dir / "build-ipk.sh").write_text("#!/bin/bash\necho hi\n")
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "script"
     assert makefile_dir is None
 
@@ -206,7 +226,7 @@ def test_detect_control_dir(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
     (pkg_dir / "CONTROL").mkdir()
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "opkg-build"
     assert makefile_dir is None
 
@@ -214,7 +234,7 @@ def test_detect_control_dir(repo_dir):
 def test_detect_nothing_skips(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "skip"
     assert makefile_dir is None
 
@@ -223,7 +243,7 @@ def test_detect_non_openwrt_makefile_ignored(repo_dir):
     pb, pkg_dir = _make_builder(repo_dir)
     (pkg_dir / "Makefile").write_text("all:\n\techo hello\n")
 
-    method, makefile_dir = pb._detect_build_method()
+    method, makefile_dir, _pkgs = pb._detect_build_method()
     assert method == "skip"
 
 
@@ -232,7 +252,7 @@ def test_detect_priority_sdk_over_script(repo_dir):
     (pkg_dir / "Makefile").write_text(OPENWRT_MAKEFILE)
     (pkg_dir / "build-ipk.sh").write_text("#!/bin/bash\n")
 
-    method, _ = pb._detect_build_method()
+    method, _, _ = pb._detect_build_method()
     assert method == "sdk"
 
 

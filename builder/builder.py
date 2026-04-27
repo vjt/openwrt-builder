@@ -35,6 +35,40 @@ def _is_openwrt_makefile(path: Path) -> bool:
         return False
 
 
+def _register_sdk_feed(sdk_path: Path, name: str, src_dir: Path) -> None:
+    """Idempotently add a `src-link` custom feed to an SDK's feeds.conf.
+
+    OpenWrt SDKs ship with `feeds.conf.default` (read-only template); if the
+    user provides `feeds.conf` it replaces the default entirely. We seed
+    `feeds.conf` from the default on first call, then append/replace the
+    `src-link <name> <src_dir>` line so re-runs are no-ops.
+    """
+    feeds_conf = sdk_path / "feeds.conf"
+    feeds_default = sdk_path / "feeds.conf.default"
+    if not feeds_conf.exists() and feeds_default.exists():
+        feeds_conf.write_text(feeds_default.read_text())
+
+    line = f"src-link {name} {src_dir}\n"
+    existing = feeds_conf.read_text() if feeds_conf.exists() else ""
+    kept = [
+        ln for ln in existing.splitlines(keepends=True)
+        if not ln.startswith(f"src-link {name} ")
+    ]
+    feeds_conf.write_text("".join(kept) + line)
+
+
+def _extract_pkg_name(makefile: Path) -> str | None:
+    """Read PKG_NAME from an OpenWrt package Makefile."""
+    try:
+        for line in makefile.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("PKG_NAME:="):
+                return stripped.split(":=", 1)[1].strip()
+        return None
+    except Exception:
+        return None
+
+
 def reindex_feed(feed_arch_dir: str):
     """Regenerate the opkg (ipk) Packages index in a feed arch directory.
 
@@ -194,7 +228,7 @@ class PackageBuilder:
 
     async def build_for_target(self, target: str) -> list[Path]:
         """Build the package for a specific target. Returns list of .ipk paths."""
-        method, makefile_dir = self._detect_build_method()
+        method, source_dir, pkg_names = self._detect_build_method()
 
         if method == "skip":
             logger.warning(
@@ -210,42 +244,69 @@ class PackageBuilder:
         if method == "opkg-build":
             return self._build_with_opkg(target)
 
+        if method == "sdk-feed":
+            assert source_dir is not None
+            if self.remote_builder:
+                return await self._build_remote(
+                    target, feed_dir=source_dir, pkg_names=pkg_names)
+            return self._build_with_sdk_feed(target, source_dir, pkg_names)
+
         # method == "sdk"
         if self.remote_builder:
-            return await self._build_remote(target, makefile_dir=makefile_dir)
-        return self._build_with_sdk(target, makefile_dir=makefile_dir)
+            return await self._build_remote(target, makefile_dir=source_dir)
+        return self._build_with_sdk(target, makefile_dir=source_dir)
 
-    def _detect_build_method(self) -> tuple[str, Path | None]:
+    def _detect_build_method(self) -> tuple[str, Path | None, list[str]]:
         """Detect how to build this repo based on its contents.
 
-        Returns (method, makefile_dir) where method is one of:
-          "sdk", "script", "opkg-build", "skip"
+        Returns (method, source_dir, pkg_names) where method is one of:
+          "sdk", "sdk-feed", "script", "opkg-build", "skip"
+
+        For "sdk", source_dir is the Makefile directory and pkg_names is empty
+        (the repo is symlinked into the SDK as `package/<repo-name>` and built
+        with `make package/<repo-name>/compile`).
+
+        For "sdk-feed", source_dir is the openwrt/ root containing 2+ package
+        subdirs and pkg_names lists the actual PKG_NAMEs. The openwrt/ dir is
+        registered as a `src-link` custom feed in the SDK so inter-package
+        DEPENDS resolve naturally (e.g. android-tools → libbrotli{...}).
 
         SDK Makefile lookup order:
           1. <repo>/Makefile                — single-package repo at root
           2. <repo>/openwrt/Makefile        — legacy layout (single package)
-          3. <repo>/openwrt/<pkgname>/Makefile — blessed src-link feed layout
+          3. <repo>/openwrt/<pkgname>/Makefile — single-package src-link layout
+          4. <repo>/openwrt/<pkgA>/Makefile + <pkgB>/Makefile — multi-package
         """
         candidates = [self.repo_dir / "Makefile",
                       self.repo_dir / "openwrt" / "Makefile"]
+        for candidate in candidates:
+            if candidate.exists() and _is_openwrt_makefile(candidate):
+                return ("sdk", candidate.parent, [])
 
         openwrt_dir = self.repo_dir / "openwrt"
         if openwrt_dir.is_dir():
+            pkg_makefiles = []
             for subdir in sorted(openwrt_dir.iterdir()):
                 if subdir.is_dir():
-                    candidates.append(subdir / "Makefile")
-
-        for candidate in candidates:
-            if candidate.exists() and _is_openwrt_makefile(candidate):
-                return ("sdk", candidate.parent)
+                    mk = subdir / "Makefile"
+                    if mk.exists() and _is_openwrt_makefile(mk):
+                        pkg_makefiles.append(mk)
+            if len(pkg_makefiles) == 1:
+                return ("sdk", pkg_makefiles[0].parent, [])
+            if len(pkg_makefiles) >= 2:
+                pkg_names = [
+                    n for n in (_extract_pkg_name(m) for m in pkg_makefiles)
+                    if n
+                ]
+                return ("sdk-feed", openwrt_dir, pkg_names)
 
         if (self.repo_dir / "build-ipk.sh").exists():
-            return ("script", None)
+            return ("script", None, [])
 
         if (self.repo_dir / "CONTROL").is_dir():
-            return ("opkg-build", None)
+            return ("opkg-build", None, [])
 
-        return ("skip", None)
+        return ("skip", None, [])
 
     def _get_arch_dir(self, target: str) -> Path:
         """Return the feed directory for a target."""
@@ -306,8 +367,13 @@ class PackageBuilder:
                      first_target)
         return first_target
 
-    async def _build_remote(self, target: str,
-                             makefile_dir: Path | None = None) -> list[Path]:
+    async def _build_remote(
+        self,
+        target: str,
+        makefile_dir: Path | None = None,
+        feed_dir: Path | None = None,
+        pkg_names: list[str] | None = None,
+    ) -> list[Path]:
         """Build the package on a remote Hetzner instance via SSH."""
         assert self.remote_builder is not None
 
@@ -328,18 +394,29 @@ class PackageBuilder:
         # Sync the local clone to the remote server
         self.remote_builder.sync_repo(str(self.repo_dir), self.name)
 
-        # Determine makefile subdir relative to repo root (e.g., "openwrt")
-        makefile_subdir = None
-        if makefile_dir and makefile_dir != self.repo_dir:
-            makefile_subdir = str(makefile_dir.relative_to(self.repo_dir))
-
-        remote_ipks = self.remote_builder.build_package(
-            name=self.name,
-            makefile_subdir=makefile_subdir,
-            target=target,
-            sdk_force=self.sdk_force,
-            openwrt_version=self.openwrt_version,
-        )
+        if feed_dir is not None:
+            assert pkg_names, "feed mode requires non-empty pkg_names"
+            feed_subdir = str(feed_dir.relative_to(self.repo_dir))
+            remote_ipks = self.remote_builder.build_packages_via_feed(
+                name=self.name,
+                feed_subdir=feed_subdir,
+                pkg_names=pkg_names,
+                target=target,
+                sdk_force=self.sdk_force,
+                openwrt_version=self.openwrt_version,
+            )
+        else:
+            # Determine makefile subdir relative to repo root (e.g., "openwrt")
+            makefile_subdir = None
+            if makefile_dir and makefile_dir != self.repo_dir:
+                makefile_subdir = str(makefile_dir.relative_to(self.repo_dir))
+            remote_ipks = self.remote_builder.build_package(
+                name=self.name,
+                makefile_subdir=makefile_subdir,
+                target=target,
+                sdk_force=self.sdk_force,
+                openwrt_version=self.openwrt_version,
+            )
 
         return self.remote_builder.download_ipks(remote_ipks, str(arch_dir))
 
@@ -408,6 +485,86 @@ class PackageBuilder:
             stderr_tail = "\n".join(error_lines[-30:])
             raise RuntimeError(
                 f"SDK build failed for {self.name}:\n{stderr_tail}"
+            )
+
+        return self._collect_and_copy(
+            sdk_path / "bin" / "packages", arch_dir
+        )
+
+    def _build_with_sdk_feed(
+        self,
+        target: str,
+        feed_dir: Path,
+        pkg_names: list[str],
+    ) -> list[Path]:
+        """Build a multi-package repo by registering its openwrt/ as a custom
+        feed in the SDK and compiling each package. Inter-package DEPENDS
+        resolve via the SDK's normal feed machinery."""
+        if not pkg_names:
+            raise RuntimeError(
+                f"sdk-feed build of {self.name}: no PKG_NAMEs discovered "
+                f"in {feed_dir}"
+            )
+
+        arch_dir = self._get_arch_dir(target)
+        arch_dir.mkdir(parents=True, exist_ok=True)
+
+        actual_target = target
+        if target == "all":
+            actual_target = self._pick_any_sdk_target()
+
+        self.sdk_manager.ensure_downloaded(actual_target)
+        sdk_path = Path(self.sdk_manager.get_sdk_path(actual_target))
+
+        feed_name = self.name
+        _register_sdk_feed(sdk_path, feed_name, feed_dir)
+
+        # Clean previous build output so we only collect this repo's packages
+        bin_packages = sdk_path / "bin" / "packages"
+        if bin_packages.exists():
+            shutil.rmtree(str(bin_packages))
+
+        force_flag = ["FORCE=1"] if self.sdk_force else []
+
+        logger.info("Updating + installing custom feed %s for %s",
+                     feed_name, self.name)
+        subprocess.run(
+            [str(sdk_path / "scripts/feeds"), "update", feed_name],
+            cwd=str(sdk_path), check=True,
+        )
+        subprocess.run(
+            [str(sdk_path / "scripts/feeds"), "install", "-p", feed_name, "-a"],
+            cwd=str(sdk_path), check=True,
+        )
+
+        if not (sdk_path / ".config").exists():
+            logger.info("Running make defconfig for SDK %s", actual_target)
+            subprocess.run(
+                ["make", "defconfig", *force_flag],
+                cwd=str(sdk_path), capture_output=True,
+            )
+
+        compile_targets = [f"package/{p}/compile" for p in pkg_names]
+        logger.info("Compiling %s for %s (SDK target: %s)",
+                     ", ".join(pkg_names), target, actual_target)
+        result = subprocess.run(
+            ["make", *compile_targets, "V=s", f"-j{_nproc()}", *force_flag],
+            cwd=str(sdk_path), capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            all_output = (result.stdout or "") + (result.stderr or "")
+            error_lines = [
+                line for line in all_output.splitlines()
+                if line.strip()
+                and not line.startswith("make[")
+                and not line.startswith("make:")
+                and not line.startswith("Checking ")
+                and not line.startswith("WARNING:")
+                and "warning:" not in line
+            ]
+            raise RuntimeError(
+                f"SDK build failed for {self.name}:\n"
+                + "\n".join(error_lines[-30:])
             )
 
         return self._collect_and_copy(
