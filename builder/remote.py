@@ -388,6 +388,7 @@ echo "===PKG_LIST_END==="
         # OpenWrt's scripts/feeds tolerates a missing trailing newline; be safe.
         build_script = f"""set -e
 cd {sdk_path}
+echo "===STEP=cd-sdk ok===" >&2
 
 # Seed feeds.conf from feeds.conf.default if absent, then add our src-link
 # entry idempotently so re-runs (force rebuild, retries) don't pile up.
@@ -397,34 +398,40 @@ fi
 grep -v '^src-link {feed_name} ' feeds.conf > feeds.conf.new || true
 echo 'src-link {feed_name} {feed_root}' >> feeds.conf.new
 mv feeds.conf.new feeds.conf
+echo "===STEP=feeds-conf ok===" >&2
 
 # Update + install all feeds, not just our custom one. Multi-package
 # repos can depend on packages from the upstream feeds (e.g. protobuf,
 # abseil-cpp). Without `-a` on the standard feeds those don't get
 # symlinked into package/feeds/, so any cross-feed Build-Depends or
 # recursive `make package/<dep>/host/compile` calls dead-end.
-./scripts/feeds update -a
+./scripts/feeds update -a > /tmp/feeds-update.log 2>&1
+echo "===STEP=feeds-update ok===" >&2
 # feeds install -a can return non-zero when individual packages fail to
 # symlink (e.g. duplicate provides between feeds, missing source dirs) —
 # those are non-fatal for our build path. Don't let them kill set -e.
-./scripts/feeds install -a || true
+./scripts/feeds install -a > /tmp/feeds-install.log 2>&1 || true
+echo "===STEP=feeds-install done===" >&2
 
 # Clean previous build output so we only collect this run's packages
 rm -rf {sdk_path}/bin/packages
+echo "===STEP=clean-bin ok===" >&2
 
 if [ ! -f .config ]; then
     if ! make defconfig {force_flag} > /tmp/defconfig.log 2>&1; then
-        echo "===DEFCONFIG_FAILED==="
-        tail -500 /tmp/defconfig.log
+        echo "===DEFCONFIG_FAILED===" >&2
+        tail -500 /tmp/defconfig.log >&2
         exit 1
     fi
 fi
+echo "===STEP=defconfig ok===" >&2
 
 if ! make {compile_targets} V=s -j$(nproc) {force_flag} > /tmp/build.log 2>&1; then
-    echo "===BUILD_FAILED==="
-    tail -500 /tmp/build.log
+    echo "===BUILD_FAILED===" >&2
+    tail -500 /tmp/build.log >&2
     exit 1
 fi
+echo "===STEP=compile ok===" >&2
 
 echo "===PKG_LIST_START==="
 find {sdk_path}/bin/packages \\( -name '*.ipk' -o -name '*.apk' \\) 2>/dev/null || true
