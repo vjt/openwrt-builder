@@ -12,11 +12,16 @@ from sdk import sdk_url
 
 logger = logging.getLogger(__name__)
 
-# Packages needed on the remote Hetzner instance for SDK builds
+# Packages needed on the remote Hetzner instance for SDK builds. Mirrors the
+# set baked into the local owrt-builder-trunk docker image; with feed mode
+# `make defconfig` enables the full target-default package list (including
+# uboot-mediatek device variants) and their prereq scripts demand swig,
+# zlib-dev, etc., even for an apparently unrelated `package/<pkg>/compile`.
 REMOTE_DEPS = (
-    "build-essential libncurses-dev gawk git wget curl file rsync "
-    "unzip zstd gzip xz-utils ca-certificates python3 python3-dev "
-    "python3-setuptools make"
+    "build-essential clang flex bison g++ gawk gettext git wget curl file "
+    "rsync unzip zstd gzip xz-utils ca-certificates python3 python3-dev "
+    "python3-setuptools libncurses-dev libssl-dev zlib1g-dev swig quilt "
+    "make sudo time"
 )
 
 # How long to wait for SSH to become available after server creation.
