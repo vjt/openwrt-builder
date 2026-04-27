@@ -398,8 +398,13 @@ grep -v '^src-link {feed_name} ' feeds.conf > feeds.conf.new || true
 echo 'src-link {feed_name} {feed_root}' >> feeds.conf.new
 mv feeds.conf.new feeds.conf
 
-./scripts/feeds update {feed_name}
-./scripts/feeds install -p {feed_name} -a
+# Update + install all feeds, not just our custom one. Multi-package
+# repos can depend on packages from the upstream feeds (e.g. protobuf,
+# abseil-cpp). Without `-a` on the standard feeds those don't get
+# symlinked into package/feeds/, so any cross-feed Build-Depends or
+# recursive `make package/<dep>/host/compile` calls dead-end.
+./scripts/feeds update -a
+./scripts/feeds install -a
 
 # Clean previous build output so we only collect this run's packages
 rm -rf {sdk_path}/bin/packages

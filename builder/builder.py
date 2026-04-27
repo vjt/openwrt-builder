@@ -528,14 +528,17 @@ class PackageBuilder:
 
         force_flag = ["FORCE=1"] if self.sdk_force else []
 
-        logger.info("Updating + installing custom feed %s for %s",
-                     feed_name, self.name)
+        logger.info("Updating + installing all feeds for %s", self.name)
+        # Update + install all feeds, not just our custom one. Multi-package
+        # repos can depend on packages from the upstream feeds (e.g.
+        # protobuf, abseil-cpp). Without that those don't get symlinked into
+        # package/feeds/, so cross-feed Build-Depends dead-end.
         subprocess.run(
-            [str(sdk_path / "scripts/feeds"), "update", feed_name],
+            [str(sdk_path / "scripts/feeds"), "update", "-a"],
             cwd=str(sdk_path), check=True,
         )
         subprocess.run(
-            [str(sdk_path / "scripts/feeds"), "install", "-p", feed_name, "-a"],
+            [str(sdk_path / "scripts/feeds"), "install", "-a"],
             cwd=str(sdk_path), check=True,
         )
 
