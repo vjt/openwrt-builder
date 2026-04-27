@@ -150,7 +150,11 @@ class OpenwrtBot:
             )
 
     async def notify_failure(self, repo_name: str, error: str):
-        await self.notify(f"BUILD FAILED: {repo_name}\n\n{error[:500]}")
+        # Telegram message hard limit is 4096 chars. 500 used to swallow
+        # everything past "Installing package …" — keep the most-recent ~3800
+        # chars so real make output survives. Plain text (no markdown).
+        body = error[-3800:]
+        await self.notify(f"BUILD FAILED: {repo_name}\n\n{body}")
 
     async def notify_recovery(self, repo_name: str):
         await self.notify(f"RECOVERED: {repo_name} is building successfully again.")
