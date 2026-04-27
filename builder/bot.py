@@ -210,9 +210,14 @@ class OpenwrtBot:
 
     async def _post_init(self, application: Application) -> None:
         """Register bot commands for Telegram autocompletion."""
-        await application.bot.set_my_commands([
-            BotCommand("status", "Show build status for all repos"),
-            BotCommand("list", "List configured repos"),
-            BotCommand("rebuild", "Rebuild a repo or all repos"),
-            BotCommand("logs", "Show build log for a repo"),
-        ])
+        logger.info("Registering Telegram bot commands")
+        try:
+            await application.bot.set_my_commands([
+                BotCommand("status", "Show build status for all repos"),
+                BotCommand("list",   "List configured repos and their last commits"),
+                BotCommand("rebuild","Rebuild a repo: /rebuild <name|all>"),
+                BotCommand("logs",   "Show last build log: /logs <name>"),
+            ])
+            logger.info("Telegram bot commands registered")
+        except Exception:
+            logger.exception("Failed to register Telegram bot commands")
