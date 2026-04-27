@@ -378,6 +378,9 @@ echo "===PKG_LIST_END==="
 
         source_dir = f"/tmp/src/{name}"
         feed_root = f"{source_dir}/{feed_subdir}"
+        # OpenWrt scripts/feeds parses feed names as \w+ (no hyphens) — turn
+        # the repo name into a legal identifier.
+        feed_name = name.replace("-", "_")
         force_flag = "FORCE=1" if sdk_force else ""
         compile_targets = " ".join(f"package/{p}/compile" for p in pkg_names)
 
@@ -391,12 +394,12 @@ cd {sdk_path}
 if [ ! -f feeds.conf ] && [ -f feeds.conf.default ]; then
     cp feeds.conf.default feeds.conf
 fi
-grep -v '^src-link {name} ' feeds.conf > feeds.conf.new || true
-echo 'src-link {name} {feed_root}' >> feeds.conf.new
+grep -v '^src-link {feed_name} ' feeds.conf > feeds.conf.new || true
+echo 'src-link {feed_name} {feed_root}' >> feeds.conf.new
 mv feeds.conf.new feeds.conf
 
-./scripts/feeds update {name}
-./scripts/feeds install -p {name} -a
+./scripts/feeds update {feed_name}
+./scripts/feeds install -p {feed_name} -a
 
 # Clean previous build output so we only collect this run's packages
 rm -rf {sdk_path}/bin/packages

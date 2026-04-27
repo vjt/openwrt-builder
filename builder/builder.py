@@ -516,7 +516,9 @@ class PackageBuilder:
         self.sdk_manager.ensure_downloaded(actual_target)
         sdk_path = Path(self.sdk_manager.get_sdk_path(actual_target))
 
-        feed_name = self.name
+        # OpenWrt scripts/feeds parses feed names as \w+ (no hyphens) — turn
+        # the repo name into a legal identifier.
+        feed_name = self.name.replace("-", "_")
         _register_sdk_feed(sdk_path, feed_name, feed_dir)
 
         # Clean previous build output so we only collect this repo's packages
