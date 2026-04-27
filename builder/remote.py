@@ -415,7 +415,7 @@ fi
 
 if ! make {compile_targets} V=s -j$(nproc) {force_flag} > /tmp/build.log 2>&1; then
     echo "===BUILD_FAILED==="
-    tail -50 /tmp/build.log
+    tail -500 /tmp/build.log
     exit 1
 fi
 
