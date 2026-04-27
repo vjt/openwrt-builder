@@ -410,7 +410,11 @@ mv feeds.conf.new feeds.conf
 rm -rf {sdk_path}/bin/packages
 
 if [ ! -f .config ]; then
-    make defconfig {force_flag} > /dev/null 2>&1
+    if ! make defconfig {force_flag} > /tmp/defconfig.log 2>&1; then
+        echo "===DEFCONFIG_FAILED==="
+        tail -500 /tmp/defconfig.log
+        exit 1
+    fi
 fi
 
 if ! make {compile_targets} V=s -j$(nproc) {force_flag} > /tmp/build.log 2>&1; then
