@@ -404,7 +404,10 @@ mv feeds.conf.new feeds.conf
 # symlinked into package/feeds/, so any cross-feed Build-Depends or
 # recursive `make package/<dep>/host/compile` calls dead-end.
 ./scripts/feeds update -a
-./scripts/feeds install -a
+# feeds install -a can return non-zero when individual packages fail to
+# symlink (e.g. duplicate provides between feeds, missing source dirs) —
+# those are non-fatal for our build path. Don't let them kill set -e.
+./scripts/feeds install -a || true
 
 # Clean previous build output so we only collect this run's packages
 rm -rf {sdk_path}/bin/packages
