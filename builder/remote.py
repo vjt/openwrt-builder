@@ -402,10 +402,16 @@ echo "===PKG_LIST_END==="
         target: str,
         openwrt_version: str,
         sdk_force: bool = False,
+        pre_compile_deps: list[str] | None = None,
     ) -> list[str]:
         """Build a multi-package repo by registering its openwrt/ as a
         `src-link` custom feed in the remote SDK and compiling each package.
         Returns list of remote .ipk/.apk paths.
+
+        `pre_compile_deps` is a list of feed package names (e.g. "libmbim")
+        whose `make package/<dep>/compile` is run before the repo's own
+        packages, so their staged headers/libraries are present when the
+        repo's Build/Compile step invokes the cross-compiler.
         """
         if not pkg_names:
             raise ValueError("pkg_names must be non-empty for feed builds")
@@ -423,6 +429,9 @@ echo "===PKG_LIST_END==="
         feed_name = name.replace("-", "_")
         force_flag = "FORCE=1" if sdk_force else ""
         compile_targets = " ".join(f"package/{p}/compile" for p in pkg_names)
+        pre_compile_targets = " ".join(
+            f"package/{d}/compile" for d in (pre_compile_deps or [])
+        )
 
         # Quote the feed line so a path with spaces wouldn't tokenize wrong.
         # OpenWrt's scripts/feeds tolerates a missing trailing newline; be safe.
@@ -465,6 +474,19 @@ if [ ! -f .config ]; then
     fi
 fi
 echo "===STEP=defconfig ok===" >&2
+
+# Compile feed-package dependencies first so their headers/.so files are
+# staged before the repo's Build/Compile runs the cross-compiler. Without
+# this, packages whose Build/Compile invokes gcc against system libs fail
+# at "fatal error: glib.h: No such file or directory" on a fresh SDK.
+if [ -n "{pre_compile_targets}" ]; then
+    if ! make {pre_compile_targets} V=s -j$(nproc) {force_flag} > /tmp/precompile.log 2>&1; then
+        echo "===PRECOMPILE_FAILED===" >&2
+        tail -500 /tmp/precompile.log >&2
+        exit 1
+    fi
+    echo "===STEP=precompile ok===" >&2
+fi
 
 if ! make {compile_targets} V=s -j$(nproc) {force_flag} > /tmp/build.log 2>&1; then
     echo "===BUILD_FAILED===" >&2

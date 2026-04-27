@@ -185,6 +185,14 @@ class PackageBuilder:
         self.branch = repo_config["branch"]
         self.targets = repo_config.get("targets", [])
         self.openwrt_version = repo_config["openwrt_version"]
+        # Optional list of feed packages (e.g. ["libmbim", "glib2"]) that the
+        # remote SDK must compile + stage before the repo's own packages are
+        # built. PKG_BUILD_DEPENDS in the package Makefile alone doesn't
+        # always trigger this — the SDK only resolves install-time deps when
+        # invoked via `make package/<pkg>/compile`, so packages that pull in
+        # libraries with C headers can fail with `glib.h: No such file`. List
+        # those deps here and the remote build script compiles them first.
+        self.pre_compile_deps = repo_config.get("pre_compile_deps", [])
         self.repo_dir = Path(repo_cache_dir) / self.name
         self.feed_dir = Path(feed_dir)
         if self.openwrt_version not in sdk_managers:
@@ -404,6 +412,7 @@ class PackageBuilder:
                 target=target,
                 sdk_force=self.sdk_force,
                 openwrt_version=self.openwrt_version,
+                pre_compile_deps=self.pre_compile_deps,
             )
         else:
             # Determine makefile subdir relative to repo root (e.g., "openwrt")
