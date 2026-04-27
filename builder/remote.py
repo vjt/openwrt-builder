@@ -114,6 +114,17 @@ class RemoteBuilder:
             check=True,
         )
 
+    def _scp_to(self, local_path: str, remote_path: str) -> None:
+        """Copy a file from local to the remote server."""
+        if not self._server_ip:
+            raise RuntimeError("No server running — call ensure_server() first")
+
+        subprocess.run(
+            ["scp", *SSH_OPTS, "-i", self.ssh_key_path,
+             local_path, f"root@{self._server_ip}:{remote_path}"],
+            check=True,
+        )
+
     def ensure_server(self) -> str:
         """Create a Hetzner server if not already running. Returns the IP."""
         if self._server_ip:
@@ -495,7 +506,8 @@ echo "===PKG_LIST_END==="
         return downloaded
 
     def reindex_apk_feed(self, local_dir: str, openwrt_version: str,
-                         target: str) -> Path | None:
+                         target: str,
+                         apk_signing_key: str | None = None) -> Path | None:
         """Regenerate APKINDEX.tar.gz for an apk feed directory.
 
         apk-tools 3.x is required and not shipped on Debian; we reuse the apk
@@ -503,6 +515,10 @@ echo "===PKG_LIST_END==="
         provisioned Hetzner server. Uploads every .apk in local_dir to the
         remote, invokes `apk mkndx`, and downloads the produced
         APKINDEX.tar.gz back. Returns the local index path on success.
+
+        When apk_signing_key is provided, the index is signed with that ECDSA
+        PEM private key. Routers add the matching public key to
+        /etc/apk/keys/<basename> to verify (default basename: feed-signing.pem).
         """
         local = Path(local_dir)
         apks = sorted(local.glob("*.apk"))
@@ -532,15 +548,23 @@ echo "===PKG_LIST_END==="
         # ephemeral build-time key whose public half is NOT in the remote
         # server's apk keyring, so strict verification always fails. We built
         # these packages ourselves one step earlier in this same process, so
-        # skipping the verify gate is safe. Router-side trust is a separate
-        # concern tracked via the usign-equivalent apk signing of the index.
+        # skipping the verify gate is safe. Router-side trust comes from
+        # signing the index itself (--sign-key) below.
+        sign_args = ""
+        if apk_signing_key:
+            remote_signing_key = (
+                f"/tmp/apkindex/{Path(apk_signing_key).name}"
+            )
+            self._scp_to(apk_signing_key, remote_signing_key)
+            sign_args = f"--sign-key {remote_signing_key}"
+
         index_script = f"""set -e
 cd {remote_feed}
 if [ ! -x {apk_bin} ]; then
     echo "apk binary missing at {apk_bin}" >&2
     exit 1
 fi
-{apk_bin} --allow-untrusted mkndx -o APKINDEX.tar.gz *.apk
+{apk_bin} --allow-untrusted mkndx {sign_args} -o APKINDEX.tar.gz *.apk
 """
         result = self._ssh_script(index_script, check=False)
         if result.returncode != 0:

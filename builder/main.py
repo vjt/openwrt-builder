@@ -28,6 +28,13 @@ HETZNER_TOKEN_PATH = "/runtime/hetzner.token"
 SIGNING_KEY = "/runtime/feed-signing.key"
 SIGNING_PUB = "/runtime/feed-signing.pub"
 
+# Separate ECDSA P-256 keypair for OpenWrt 25.12 apk index signing. usign keys
+# are the wrong scheme for apk-tools 3 — `apk mkndx --sign-key` wants PEM EC.
+# Both files use the same basename (feed-signing.pem) so apk's basename-based
+# key lookup resolves on routers without renaming.
+APK_SIGNING_KEY = "/runtime/feed-signing.pem"            # private (this host)
+APK_SIGNING_PUB_TMP = "/runtime/feed-signing.pub.pem"   # public-only export
+
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     level=logging.INFO,
@@ -50,7 +57,8 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
                     sdk_mgrs: dict[str, SDKManager],
                     bot: OpenwrtBot | None = None, force_repo: str | None = None,
                     remote_builder: RemoteBuilder | None = None,
-                    signing_key: str | None = None) -> None:
+                    signing_key: str | None = None,
+                    apk_signing_key: str | None = None) -> None:
     """Run one build cycle across all (repo, openwrt_version) combinations.
 
     Feed arch directories touched by apk builds get a post-cycle reindex via
@@ -171,7 +179,10 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
     if apk_dirs_to_reindex and remote_builder:
         for arch_dir, (version, target) in apk_dirs_to_reindex.items():
             try:
-                remote_builder.reindex_apk_feed(arch_dir, version, target)
+                remote_builder.reindex_apk_feed(
+                    arch_dir, version, target,
+                    apk_signing_key=apk_signing_key,
+                )
             except Exception as e:
                 logger.error("apk reindex failed for %s: %s", arch_dir, e)
 
@@ -183,11 +194,13 @@ def rebuild_callback_factory(config: dict[str, Any], state: StateManager,
                              sdk_mgrs: dict[str, SDKManager],
                              bot: OpenwrtBot | None,
                              remote_builder: RemoteBuilder | None = None,
-                             signing_key: str | None = None) -> Any:
+                             signing_key: str | None = None,
+                             apk_signing_key: str | None = None) -> Any:
     """Create a rebuild callback for the Telegram bot."""
     async def rebuild(target: str):
         await run_build_cycle(config, state, sdk_mgrs, bot=bot, force_repo=target,
-                              remote_builder=remote_builder, signing_key=signing_key)
+                              remote_builder=remote_builder, signing_key=signing_key,
+                              apk_signing_key=apk_signing_key)
         # Destroy remote server after manual rebuild too
         if remote_builder and remote_builder._server_name:
             if bot:
@@ -221,7 +234,7 @@ async def main():
             (Path(FEED_DIR) / arch).mkdir(parents=True, exist_ok=True)
     (Path(FEED_DIR) / "all").mkdir(parents=True, exist_ok=True)
 
-    # Generate signing keypair if it doesn't exist
+    # Generate usign signing keypair if it doesn't exist (legacy opkg routers).
     signing_key = None
     if not Path(SIGNING_KEY).exists():
         logger.info("Generating feed signing keypair")
@@ -233,6 +246,33 @@ async def main():
     if Path(SIGNING_KEY).exists():
         signing_key = SIGNING_KEY
         logger.info("Feed signing enabled")
+
+    # Generate ECDSA P-256 keypair for apk-tools 3 (OpenWrt 25.12+).
+    apk_signing_key = None
+    if not Path(APK_SIGNING_KEY).exists():
+        logger.info("Generating apk (ECDSA) signing keypair")
+        subprocess.run(
+            ["openssl", "ecparam", "-name", "prime256v1", "-genkey",
+             "-noout", "-out", APK_SIGNING_KEY],
+            check=True,
+        )
+    if Path(APK_SIGNING_KEY).exists():
+        apk_signing_key = APK_SIGNING_KEY
+        # Extract public half + publish at feed root so routers fetch it
+        # without out-of-band channels. Basename (feed-signing.pem) must
+        # match the --sign-key basename used by `apk mkndx`.
+        try:
+            subprocess.run(
+                ["openssl", "ec", "-in", APK_SIGNING_KEY,
+                 "-pubout", "-out", APK_SIGNING_PUB_TMP],
+                check=True,
+                capture_output=True,
+            )
+            published_pub = Path(FEED_DIR) / "feed-signing.pem"
+            published_pub.write_bytes(Path(APK_SIGNING_PUB_TMP).read_bytes())
+        except (OSError, subprocess.CalledProcessError) as e:
+            logger.warning("Could not publish apk signing pubkey to feed: %s", e)
+        logger.info("apk feed signing (ECDSA) enabled")
 
     # Set up remote builder if Hetzner is configured
     remote_builder = None
@@ -294,11 +334,13 @@ async def main():
             state_manager=state,
             repos_config=config["repos"],
             rebuild_callback=rebuild_callback_factory(
-                config, state, sdk_mgrs, None, remote_builder, signing_key),
+                config, state, sdk_mgrs, None, remote_builder, signing_key,
+                apk_signing_key),
             log_dir=LOG_DIR,
         )
         bot.rebuild_callback = rebuild_callback_factory(
-            config, state, sdk_mgrs, bot, remote_builder, signing_key)
+            config, state, sdk_mgrs, bot, remote_builder, signing_key,
+            apk_signing_key)
 
         app = bot.build_application()
 
@@ -322,7 +364,8 @@ async def main():
             try:
                 await run_build_cycle(config, state, sdk_mgrs, bot=bot,
                                       remote_builder=remote_builder,
-                                      signing_key=signing_key)
+                                      signing_key=signing_key,
+                                      apk_signing_key=apk_signing_key)
             except Exception:
                 logger.exception("Build cycle crashed — tearing down any "
                                  "provisioned server before retrying")
