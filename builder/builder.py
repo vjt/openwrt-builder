@@ -317,7 +317,8 @@ class PackageBuilder:
         created = self.remote_builder._server_ip is None
         if created and self.bot:
             await self.bot.notify_server_create(
-                self.remote_builder.server_type, self.remote_builder.location)
+                self.remote_builder.server_type,
+                ", ".join(self.remote_builder.locations))
 
         ip = self.remote_builder.ensure_server()
 

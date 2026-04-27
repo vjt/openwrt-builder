@@ -240,10 +240,11 @@ async def main():
                 api_token=api_token,
                 ssh_key_name=hetzner_config.get("ssh_key_name", "openwrt-builder"),
                 server_type=hetzner_config.get("server_type", "cx22"),
-                location=hetzner_config.get("location", "fsn1"),
+                locations=hetzner_config.get("locations", ["fsn1"]),
             )
-            logger.info("Hetzner remote builder configured (%s in %s)",
-                         remote_builder.server_type, remote_builder.location)
+            logger.info("Hetzner remote builder configured (%s in [%s])",
+                         remote_builder.server_type,
+                         ", ".join(remote_builder.locations))
         else:
             logger.warning("Hetzner token file is empty, using local builds")
     elif hetzner_config:

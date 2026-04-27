@@ -13,7 +13,7 @@ def builder():
         ssh_key_name="openwrt-builder",
         ssh_key_path="/runtime/ssh.key",
         server_type="cx22",
-        location="fsn1",
+        locations=["fsn1"],
     )
 
 

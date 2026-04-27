@@ -42,13 +42,17 @@ class RemoteBuilder:
         ssh_key_name: str,
         ssh_key_path: str = "/runtime/ssh.key",
         server_type: str = "cx23",
-        location: str = "fsn1",
+        locations: list[str] = ["fsn1"],
     ):
         self.api_token = api_token
         self.ssh_key_name = ssh_key_name
         self.ssh_key_path = ssh_key_path
         self.server_type = server_type
-        self.location = location
+        # Ordered list of fallback locations. ensure_server() walks them
+        # and tries the next one on hcloud 'resource_unavailable'.
+        if not locations:
+            raise ValueError("locations must be a non-empty list")
+        self.locations = list(locations)
 
         self._server_name: str | None = None
         self._server_ip: str | None = None
@@ -113,21 +117,40 @@ class RemoteBuilder:
             return self._server_ip
 
         self._server_name = f"openwrt-builder-{int(time.time())}"
-        logger.info("Creating build server %s (%s in %s)",
-                     self._server_name, self.server_type, self.location)
 
-        result = self._hcloud(
-            "server", "create",
-            "--name", self._server_name,
-            "--type", self.server_type,
-            "--image", "debian-12",
-            "--ssh-key", self.ssh_key_name,
-            "--location", self.location,
-            "-o", "json",
-        )
-        if result.returncode != 0:
+        last_err: str | None = None
+        result = None
+        for loc in self.locations:
+            logger.info("Creating build server %s (%s in %s)",
+                         self._server_name, self.server_type, loc)
+
+            result = self._hcloud(
+                "server", "create",
+                "--name", self._server_name,
+                "--type", self.server_type,
+                "--image", "debian-12",
+                "--ssh-key", self.ssh_key_name,
+                "--location", loc,
+                "-o", "json",
+            )
+            if result.returncode == 0:
+                break
+
+            err = result.stderr.strip()
+            last_err = err
+            # Hetzner emits 'resource_unavailable' / 'placement' when the
+            # requested server_type is sold out in a location. Other errors
+            # (auth, quota, name collision) won't clear by trying elsewhere
+            # — fail fast on those.
+            if "resource_unavailable" not in err and "placement" not in err:
+                break
+
+            logger.warning("Location %s unavailable for %s (%s); trying next",
+                            loc, self.server_type, err)
+
+        if result is None or result.returncode != 0:
             raise RuntimeError(
-                f"Failed to create server: {result.stderr.strip()}"
+                f"Failed to create server: {last_err or 'no locations tried'}"
             )
 
         data = json.loads(result.stdout)
