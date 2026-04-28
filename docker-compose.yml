@@ -11,6 +11,7 @@ services:
 
   app:
     container_name: builder-app
+    init: true
     build:
       context: ./builder
       args:
