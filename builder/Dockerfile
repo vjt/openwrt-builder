@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssh-client \
     qemu-user-static \
+    tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # Build and install usign (OpenWrt's ed25519 signing tool) for feed signing
