@@ -199,7 +199,6 @@ class OpenwrtBot:
         self.app = (
             Application.builder()
             .token(self.token)
-            .post_init(self._post_init)
             .build()
         )
         self.app.add_handler(CommandHandler("status", self.cmd_status))
@@ -210,8 +209,10 @@ class OpenwrtBot:
 
     async def register_commands(self) -> None:
         """Register bot commands for Telegram autocompletion. Called explicitly
-        from main.py after the bot is up — Application.post_init was unreliable
-        in our v20 setup, leaving the autocomplete empty."""
+        from main.py after the bot is up. Application.builder().post_init() is
+        unreliable in our v20 invocation order (initialize / start /
+        updater.start_polling) — the hook never fires and the autocomplete
+        dropdown ends up empty."""
         if not self.app:
             logger.warning("register_commands called before build_application")
             return
@@ -226,8 +227,3 @@ class OpenwrtBot:
             logger.info("Telegram bot commands registered")
         except Exception:
             logger.exception("Failed to register Telegram bot commands")
-
-    async def _post_init(self, application: Application) -> None:  # noqa: ARG002
-        # Kept for compatibility; real registration runs from main via
-        # register_commands() — see comment above.
-        pass
