@@ -7,7 +7,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8081:80"
-    restart: unless-stopped
+    restart: always
 
   app:
     container_name: builder-app
@@ -34,7 +34,7 @@ services:
       # GIT_SSH_COMMAND sidesteps ~/.ssh/config when cloning private repos
       # — keeps ssh key lookup explicit even if HOME is remapped.
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /runtime/ssh.key
-    restart: unless-stopped
+    restart: always
 
 volumes:
   cache-sdk:
