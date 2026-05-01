@@ -78,25 +78,34 @@ docker compose build && docker compose up -d
 
 ## AP configuration
 
-On OpenWrt <= 24.10 (opkg):
+On OpenWrt <= 24.10 (opkg) — point at `/all` for arch-independent
+packages, the arch dir for arch-specific ones:
 
 ```bash
 echo "src/gz custom http://<server>:8081/all" >> /etc/opkg/customfeeds.conf
 opkg update
 ```
 
-On OpenWrt >= 25.12 (apk):
+On OpenWrt >= 25.12 (apk) — point at the *base* URL only. apk's
+customfeeds client appends `/<arch>/APKINDEX.tar.gz` automatically:
 
 ```bash
-echo "http://<server>:8081/all" >> /etc/apk/repositories.d/customfeeds.list
+echo "http://<server>:8081" >> /etc/apk/repositories.d/customfeeds.list
 apk update
 ```
 
-Add the arch-specific dir (e.g. `/aarch64_cortex-a53`) alongside `/all`
-when the package is arch-dependent. The signing public key in
-`runtime/feed-signing.pub` must be installed on each device
-(`/etc/opkg/keys/` for opkg, `/etc/apk/keys/` for apk) — see
-`install-feed.sh` for the opkg flow.
+Each per-arch index carries both arch-specific packages and any
+`targets: [all]` arch-independent packages — those get hardlinked
+into every per-arch feed dir at reindex time, OpenWrt distfeeds
+convention. So a single `http://<server>:8081` line covers the whole
+catalogue for that router.
+
+`/all/` itself is still indexed (and signed) for the legacy opkg flow
+that points at `<base>/all` explicitly — see `install-feed.sh`.
+
+The signing public key in `runtime/feed-signing.pub` must be
+installed on each device (`/etc/opkg/keys/` for opkg, `/etc/apk/keys/`
+for apk).
 
 ## Telegram commands
 
@@ -130,6 +139,11 @@ cd builder && ../.venv/bin/python3 -m pytest tests/ -v
 | `ath79/tiny` | `mips_24kc` | Atheros AR71xx/AR93xx |
 
 Use `targets: [all]` for pure Lua/config packages (architecture-independent).
+The build runs once against any cached SDK; the resulting `.apk` is
+hardlinked into every per-arch feed dir at reindex time so apk-based
+routers can resolve it via `<base>/<arch>/APKINDEX.tar.gz`. The opkg
+side keeps `<base>/all/Packages.gz` for legacy `install-feed.sh`
+clients pointing at `/all` explicitly.
 
 ## License
 
