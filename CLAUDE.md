@@ -161,7 +161,7 @@ python3 -m venv .venv
 3. For remote builds: place Hetzner API token in `runtime/hetzner.token`, register the SSH key in Hetzner Cloud console
 4. Optionally copy `docker-compose.override.example.yml` to `docker-compose.override.yml` for custom networking
 5. `docker compose build && docker compose up -d`
-6. On each OpenWrt AP: `echo "src/gz custom http://<server>/all" >> /etc/opkg/customfeeds.conf`
+6. On each OpenWrt AP: `echo "src/gz custom http://<server>/all" >> /etc/opkg/customfeeds.conf` (24.10) or `echo "http://<server>" >> /etc/apk/repositories.d/customfeeds.list` (25.12 — base URL only; apk auto-appends `/<arch>/APKINDEX.tar.gz`)
 
 ### Config Options
 
