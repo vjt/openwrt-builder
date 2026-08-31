@@ -68,6 +68,33 @@ class StateManager:
             return  # caller can check notified flag
         self._save()
 
+    def record_poll_failure(self, name: str, error: str) -> bool:
+        """Record that clone/fetch failed, leaving the *build* state alone.
+
+        A poll failure means no build was attempted, so the repo's commit
+        and build status are still the last thing we actually know to be
+        true. Writing a build failure here would make the next cycle treat
+        every unreachable repo as needing a rebuild.
+
+        Returns True when the failure is worth notifying about (first one,
+        or a different error than last time).
+        """
+        repo = self.data.setdefault(name, {})
+        is_new = repo.get("poll_error") != error
+        repo["poll_error"] = error
+        repo["last_poll_failure"] = datetime.now(timezone.utc).isoformat()
+        self._save()
+        return is_new
+
+    def clear_poll_failure(self, name: str):
+        """Drop a recorded poll failure once the repo is reachable again."""
+        repo = self.data.get(name)
+        if repo is None or "poll_error" not in repo:
+            return
+        repo.pop("poll_error")
+        repo.pop("last_poll_failure", None)
+        self._save()
+
     def should_notify_failure(self, name: str) -> bool:
         """Returns True if this is the first failure (not yet notified)."""
         repo = self.get_repo(name)

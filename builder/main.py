@@ -85,6 +85,11 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
             log_file = Path(LOG_DIR) / f"{key}.log"
             log_file.parent.mkdir(parents=True, exist_ok=True)
 
+            # Polling is a separate failure domain from building: it tells us
+            # *whether* there is anything to build. Its errors must not land
+            # in the build state — a github outage would otherwise mark every
+            # repo failed and trigger a full rebuild of unchanged code on the
+            # next cycle.
             try:
                 pb = PackageBuilder(
                     repo_config=per_version_config,
@@ -99,7 +104,15 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
 
                 pb.clone_or_fetch()
                 commit = pb.get_head_commit()
+            except Exception as e:
+                logger.error("Poll failed for %s: %s", key, e)
+                if state.record_poll_failure(key, str(e)) and bot:
+                    await bot.notify_failure(key, f"poll failed: {e}")
+                continue
 
+            state.clear_poll_failure(key)
+
+            try:
                 if not state.has_changed(key, commit) and force_repo is None:
                     logger.info("No changes for %s (at %s), skipping",
                                 key, commit[:7])
@@ -145,18 +158,6 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
                     f"Build FAILED at {datetime.now(timezone.utc).isoformat()}\n"
                     f"Error: {error_msg}\n"
                 )
-
-                commit = "unknown"
-                try:
-                    pb2 = PackageBuilder(
-                        repo_config=per_version_config,
-                        repo_cache_dir=REPO_CACHE_DIR,
-                        feed_dir=FEED_DIR,
-                        sdk_managers=sdk_mgrs,
-                    )
-                    commit = pb2.get_head_commit()
-                except Exception:
-                    pass
 
                 prev = state.get_repo(key)
                 # Only suppress the notification when both the failure status

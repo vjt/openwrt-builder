@@ -85,3 +85,40 @@ def test_has_changed_commit(state_file):
     sm.record_success("pkg", "abc123")
     assert sm.has_changed("pkg", "abc123") is False
     assert sm.has_changed("pkg", "def456") is True
+
+
+def test_poll_failure_does_not_trigger_a_rebuild(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_success("pkg", "abc")
+    sm.record_poll_failure("pkg", "github unreachable")
+    assert sm.has_changed("pkg", "abc") is False
+    assert sm.get_repo("pkg")["status"] == "ok"
+    assert sm.get_repo("pkg")["last_commit"] == "abc"
+
+
+def test_poll_failure_notifies_once_per_distinct_error(state_file):
+    sm = StateManager(str(state_file))
+    assert sm.record_poll_failure("pkg", "github unreachable") is True
+    assert sm.record_poll_failure("pkg", "github unreachable") is False
+    assert sm.record_poll_failure("pkg", "auth denied") is True
+
+
+def test_poll_failure_on_never_polled_repo_still_builds_once_healthy(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_poll_failure("pkg", "github unreachable")
+    assert sm.has_changed("pkg", "abc") is True
+
+
+def test_clear_poll_failure_rearms_the_notification(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_poll_failure("pkg", "github unreachable")
+    sm.clear_poll_failure("pkg")
+    assert "poll_error" not in sm.get_repo("pkg")
+    assert sm.record_poll_failure("pkg", "github unreachable") is True
+
+
+def test_clear_poll_failure_is_a_noop_for_healthy_repo(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_success("pkg", "abc")
+    sm.clear_poll_failure("pkg")
+    assert sm.get_repo("pkg")["status"] == "ok"
