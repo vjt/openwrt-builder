@@ -169,6 +169,74 @@ class TestSetupSDK:
             assert "mediatek-filogic" in path
 
 
+class TestReindexApkFeed:
+    """The apk binary lives in an SDK's staging_dir/host/bin and is a host
+    x86_64 tool, so reindexing must not insist on the SDK matching the feed
+    dir's architecture — that SDK may never have been provisioned."""
+
+    @pytest.fixture
+    def feed_dir(self, tmp_path):
+        d = tmp_path / "mips_24kc"
+        d.mkdir()
+        (d / "pkg-1.0.apk").write_bytes(b"fake")
+        return d
+
+    def _reindex(self, builder, feed_dir, target):
+        with patch.object(builder, "_ssh_script") as mock_ssh, \
+                patch.object(builder, "_scp_from"), \
+                patch("subprocess.run") as mock_run:
+            mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = MagicMock(returncode=0)
+            builder.reindex_apk_feed(str(feed_dir), "25.12.0", target)
+            return "\n".join(c.args[0] for c in mock_ssh.call_args_list)
+
+    def test_uses_the_matching_sdk_when_it_is_provisioned(self, builder,
+                                                          feed_dir):
+        builder._server_ip = "1.2.3.4"
+        builder._setup_done.add(("ath79/tiny", "25.12.0"))
+        builder._setup_done.add(("mediatek/filogic", "25.12.0"))
+
+        script = self._reindex(builder, feed_dir, "ath79/tiny")
+
+        assert "openwrt-sdk-25.12.0-ath79-tiny" in script
+
+    def test_falls_back_to_any_sdk_provisioned_for_that_version(self, builder,
+                                                                feed_dir):
+        builder._server_ip = "1.2.3.4"
+        builder._setup_done.add(("mediatek/filogic", "25.12.0"))
+
+        script = self._reindex(builder, feed_dir, "ath79/tiny")
+
+        assert "openwrt-sdk-25.12.0-mediatek-filogic" in script
+        assert "ath79" not in script
+
+    def test_ignores_sdks_provisioned_for_another_version(self, builder,
+                                                          feed_dir):
+        builder._server_ip = "1.2.3.4"
+        builder._setup_done.add(("mediatek/filogic", "24.10.0"))
+
+        with patch.object(builder, "setup_sdk") as mock_setup, \
+                patch.object(builder, "_ssh_script") as mock_ssh, \
+                patch.object(builder, "_scp_from"), \
+                patch("subprocess.run") as mock_run:
+            mock_setup.return_value = "/opt/sdk/provisioned-on-demand"
+            mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = MagicMock(returncode=0)
+            builder.reindex_apk_feed(str(feed_dir), "25.12.0", "ath79/tiny")
+
+            mock_setup.assert_called_once_with("ath79/tiny",
+                                               openwrt_version="25.12.0")
+
+    def test_skips_empty_feed_dir(self, builder, tmp_path):
+        builder._server_ip = "1.2.3.4"
+        empty = tmp_path / "empty"
+        empty.mkdir()
+
+        with patch.object(builder, "_ssh_script") as mock_ssh:
+            assert builder.reindex_apk_feed(str(empty), "25.12.0", "all") is None
+            mock_ssh.assert_not_called()
+
+
 class TestBuildPackage:
     def test_build_returns_package_paths(self, builder):
         builder._server_ip = "1.2.3.4"

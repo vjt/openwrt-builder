@@ -302,6 +302,29 @@ echo "SDK ready at {sdk_path}"
         from sdk import sdk_dirname
         return f"/opt/sdk/{sdk_dirname(openwrt_version, target)}"
 
+    def _host_tools_sdk_path(self, target: str, openwrt_version: str) -> str:
+        """Return an SDK path on the remote whose host tools we can run.
+
+        Everything under staging_dir/host/bin (`apk` included) is a host
+        x86_64 binary, so any SDK of the right OpenWrt version serves. Prefer
+        one already provisioned this run: a feed dir can need reindexing for
+        an architecture nothing was built for — arch-independent packages get
+        mirrored into every per-arch dir — and downloading a whole SDK just
+        to borrow its apk binary is a minute of Hetzner time for nothing.
+        """
+        actual_target = target
+        if target == "all":
+            actual_target = next(iter(TARGET_ARCH_MAP))
+
+        if (actual_target, openwrt_version) in self._setup_done:
+            return self._remote_sdk_path(actual_target, openwrt_version)
+
+        for done_target, done_version in sorted(self._setup_done):
+            if done_version == openwrt_version:
+                return self._remote_sdk_path(done_target, done_version)
+
+        return self.setup_sdk(actual_target, openwrt_version=openwrt_version)
+
     def build_package(
         self,
         name: str,
@@ -600,10 +623,7 @@ echo "===PKG_LIST_END==="
         if not apks:
             return None
 
-        sdk_path = self._remote_sdk_path(
-            target if target != "all" else next(iter(TARGET_ARCH_MAP)),
-            openwrt_version,
-        )
+        sdk_path = self._host_tools_sdk_path(target, openwrt_version)
         apk_bin = f"{sdk_path}/staging_dir/host/bin/apk"
 
         remote_feed = f"/tmp/apkindex/{local.name}"
