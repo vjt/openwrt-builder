@@ -114,8 +114,14 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
 
             try:
                 if not state.has_changed(key, commit) and force_repo is None:
-                    logger.info("No changes for %s (at %s), skipping",
-                                key, commit[:7])
+                    if state.retries_exhausted(key):
+                        logger.info(
+                            "Not retrying %s (at %s): build keeps failing, "
+                            "waiting for a new commit or a manual /rebuild",
+                            key, commit[:7])
+                    else:
+                        logger.info("No changes for %s (at %s), skipping",
+                                    key, commit[:7])
                     continue
 
                 logger.info("Building %s (commit %s)", key, commit[:7])

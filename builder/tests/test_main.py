@@ -115,3 +115,34 @@ async def test_build_failure_records_the_real_commit(config, state,
     assert repo["status"] == "failed"
     assert repo["last_commit"] == "abc123"
     assert repo["error"] == "compile error"
+
+
+@pytest.mark.asyncio
+async def test_build_failure_stops_retrying_the_same_commit(config, state,
+                                                            monkeypatch):
+    from state import MAX_BUILD_ATTEMPTS
+
+    attempts = 0
+    for _ in range(MAX_BUILD_ATTEMPTS + 2):
+        fb = FakeBuilder("abc123", build_error="compile error").install(
+            monkeypatch)
+        await run(config, state)
+        attempts += fb.builds
+
+    assert attempts == MAX_BUILD_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_new_commit_rebuilds_after_exhausted_retries(config, state,
+                                                           monkeypatch):
+    from state import MAX_BUILD_ATTEMPTS
+
+    for _ in range(MAX_BUILD_ATTEMPTS):
+        FakeBuilder("abc123", build_error="compile error").install(monkeypatch)
+        await run(config, state)
+
+    fixed = FakeBuilder("def456").install(monkeypatch)
+    await run(config, state)
+
+    assert fixed.builds == 1
+    assert state.get_repo("pkg@24.10.0")["status"] == "ok"

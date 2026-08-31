@@ -3,7 +3,7 @@ import pytest
 from pathlib import Path
 from datetime import datetime, timezone
 
-from state import StateManager
+from state import StateManager, MAX_BUILD_ATTEMPTS
 
 
 @pytest.fixture
@@ -87,6 +87,54 @@ def test_has_changed_commit(state_file):
     assert sm.has_changed("pkg", "def456") is True
 
 
+def _fail_n_times(sm: StateManager, name: str, commit: str, n: int):
+    for _ in range(n):
+        sm.record_failure(name, commit, "boom")
+
+
+def test_failed_build_is_retried_up_to_the_attempt_limit(state_file):
+    sm = StateManager(str(state_file))
+    for attempt in range(1, MAX_BUILD_ATTEMPTS):
+        sm.record_failure("pkg", "abc", "boom")
+        assert sm.has_changed("pkg", "abc") is True, f"attempt {attempt}"
+
+
+def test_failed_build_stops_retrying_after_the_attempt_limit(state_file):
+    sm = StateManager(str(state_file))
+    _fail_n_times(sm, "pkg", "abc", MAX_BUILD_ATTEMPTS)
+    assert sm.has_changed("pkg", "abc") is False
+    assert sm.retries_exhausted("pkg") is True
+
+
+def test_new_commit_rebuilds_even_after_exhausted_retries(state_file):
+    sm = StateManager(str(state_file))
+    _fail_n_times(sm, "pkg", "abc", MAX_BUILD_ATTEMPTS)
+    assert sm.has_changed("pkg", "def") is True
+
+
+def test_new_commit_resets_the_failure_budget(state_file):
+    sm = StateManager(str(state_file))
+    _fail_n_times(sm, "pkg", "abc", MAX_BUILD_ATTEMPTS)
+    sm.record_failure("pkg", "def", "boom")
+    assert sm.has_changed("pkg", "def") is True
+    assert sm.retries_exhausted("pkg") is False
+
+
+def test_success_resets_the_failure_budget(state_file):
+    sm = StateManager(str(state_file))
+    _fail_n_times(sm, "pkg", "abc", MAX_BUILD_ATTEMPTS)
+    sm.record_success("pkg", "abc")
+    sm.record_failure("pkg", "abc", "boom")
+    assert sm.has_changed("pkg", "abc") is True
+
+
+def test_retries_exhausted_is_false_for_healthy_repo(state_file):
+    sm = StateManager(str(state_file))
+    assert sm.retries_exhausted("pkg") is False
+    sm.record_success("pkg", "abc")
+    assert sm.retries_exhausted("pkg") is False
+
+
 def test_poll_failure_does_not_trigger_a_rebuild(state_file):
     sm = StateManager(str(state_file))
     sm.record_success("pkg", "abc")
@@ -107,6 +155,7 @@ def test_poll_failure_on_never_polled_repo_still_builds_once_healthy(state_file)
     sm = StateManager(str(state_file))
     sm.record_poll_failure("pkg", "github unreachable")
     assert sm.has_changed("pkg", "abc") is True
+    assert sm.retries_exhausted("pkg") is False
 
 
 def test_clear_poll_failure_rearms_the_notification(state_file):

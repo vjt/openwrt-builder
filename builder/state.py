@@ -5,6 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# How many times the same commit is rebuilt after a failure before we stop.
+# Covers transient infrastructure failures (SSH timeout, mirror hiccup)
+# without spending a Hetzner server every poll interval on a deterministic
+# compile error that no amount of retrying will fix.
+MAX_BUILD_ATTEMPTS = 3
+
+
 class StateManager:
     def __init__(self, path: str):
         self.path = Path(path)
@@ -26,16 +33,33 @@ class StateManager:
     def has_changed(self, name: str, commit: str) -> bool:
         """Return True if the repo should be built this cycle.
 
-        Triggers on any of: never-built, new commit, or previous build
-        failed — a transient failure (SSH timeout, network blip) otherwise
-        stays unresolved until the upstream commit happens to change.
+        Triggers on: never-built, new commit, or a failed build whose
+        retry budget isn't spent yet — a transient failure (SSH timeout,
+        network blip) would otherwise stay unresolved until the upstream
+        commit happens to change.
         """
         repo = self.get_repo(name)
         if repo is None:
             return True
-        if repo.get("status") == "failed":
+        if repo.get("last_commit") != commit:
             return True
-        return repo.get("last_commit") != commit
+        if repo.get("status") == "failed":
+            return not self._budget_spent(repo)
+        return False
+
+    @staticmethod
+    def _budget_spent(repo: dict) -> bool:
+        # Entries written before `failures` existed count as one attempt.
+        return repo.get("failures", 1) >= MAX_BUILD_ATTEMPTS
+
+    def retries_exhausted(self, name: str) -> bool:
+        """True when a repo keeps failing on the same commit and we've
+        stopped retrying it — the caller can say so instead of logging a
+        misleading "no changes"."""
+        repo = self.get_repo(name)
+        if repo is None or repo.get("status") != "failed":
+            return False
+        return self._budget_spent(repo)
 
     def record_success(self, name: str, commit: str):
         was_failed = (
@@ -50,16 +74,24 @@ class StateManager:
         self._save()
 
     def record_failure(self, name: str, commit: str, error: str):
+        prev = self.data.get(name, {})
         already_notified = (
-            name in self.data
-            and self.data[name].get("status") == "failed"
-            and self.data[name].get("notified", False)
+            prev.get("status") == "failed"
+            and prev.get("notified", False)
+        )
+        # The retry budget is per-commit: a new commit is a new build, so it
+        # gets a fresh one even if the previous one burned through its own.
+        failures = (
+            prev.get("failures", 0) + 1
+            if prev.get("last_commit") == commit
+            else 1
         )
         self.data[name] = {
             "last_commit": commit,
             "last_build": datetime.now(timezone.utc).isoformat(),
             "status": "failed",
             "error": error,
+            "failures": failures,
             "notified": already_notified,  # preserve if already notified
         }
         if not already_notified:
