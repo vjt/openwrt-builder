@@ -12,7 +12,7 @@ class FakeBuilder:
     """
 
     def __init__(self, commit: str, poll_error: str | None = None,
-                 build_error: str | None = None):
+                 build_error: str | Exception | None = None):
         self.commit = commit
         self.poll_error = poll_error
         self.build_error = build_error
@@ -36,6 +36,8 @@ class FakeBuilder:
 
             async def build_all_targets(self):
                 outer.builds += 1
+                if isinstance(outer.build_error, Exception):
+                    raise outer.build_error
                 if outer.build_error:
                     raise RuntimeError(outer.build_error)
                 return {}
@@ -130,6 +132,36 @@ async def test_build_failure_stops_retrying_the_same_commit(config, state,
         attempts += fb.builds
 
     assert attempts == MAX_BUILD_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_a_build_verdict_is_not_retried_on_the_same_commit(
+        config, state, monkeypatch):
+    """A compile error is deterministic: retrying it just rents another
+    build server to reproduce the same failure."""
+    from errors import PackageBuildError
+
+    first = FakeBuilder("abc123", build_error=PackageBuildError("no")).install(
+        monkeypatch)
+    await run(config, state)
+    assert first.builds == 1
+
+    second = FakeBuilder("abc123",
+                         build_error=PackageBuildError("no")).install(monkeypatch)
+    await run(config, state)
+    assert second.builds == 0
+
+
+@pytest.mark.asyncio
+async def test_infrastructure_failures_are_still_retried(config, state,
+                                                         monkeypatch):
+    first = FakeBuilder("abc123", build_error="ssh timeout").install(monkeypatch)
+    await run(config, state)
+    assert first.builds == 1
+
+    second = FakeBuilder("abc123", build_error="ssh timeout").install(monkeypatch)
+    await run(config, state)
+    assert second.builds == 1
 
 
 @pytest.mark.asyncio

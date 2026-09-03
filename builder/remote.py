@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from config import TARGET_ARCH_MAP
+from errors import PackageBuildError
 from sdk import sdk_url
 
 logger = logging.getLogger(__name__)
@@ -426,7 +427,7 @@ echo "===PKG_LIST_END==="
                 and "warning:" not in line
             ]
             stderr_tail = "\n".join(error_lines[-30:])
-            raise RuntimeError(
+            raise PackageBuildError(
                 f"Remote SDK build failed for {name}:\n{stderr_tail}"
             )
 
@@ -568,7 +569,7 @@ echo "===PKG_LIST_END==="
                 and "warning:" not in line
             ]
             stderr_tail = "\n".join(error_lines[-30:])
-            raise RuntimeError(
+            raise PackageBuildError(
                 f"Remote SDK build failed for {name}:\n{stderr_tail}"
             )
 

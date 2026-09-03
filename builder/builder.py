@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from config import TARGET_ARCH_MAP
+from errors import PackageBuildError
 from sdk import SDKManager
 
 if TYPE_CHECKING:
@@ -493,7 +494,7 @@ class PackageBuilder:
                 and "warning:" not in line
             ]
             stderr_tail = "\n".join(error_lines[-30:])
-            raise RuntimeError(
+            raise PackageBuildError(
                 f"SDK build failed for {self.name}:\n{stderr_tail}"
             )
 
@@ -577,7 +578,7 @@ class PackageBuilder:
                 and not line.startswith("WARNING:")
                 and "warning:" not in line
             ]
-            raise RuntimeError(
+            raise PackageBuildError(
                 f"SDK build failed for {self.name}:\n"
                 + "\n".join(error_lines[-30:])
             )

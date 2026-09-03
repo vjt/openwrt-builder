@@ -128,6 +128,31 @@ def test_success_resets_the_failure_budget(state_file):
     assert sm.has_changed("pkg", "abc") is True
 
 
+def test_build_verdict_is_not_retried_at_all(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_failure("pkg", "abc", "compile error", retriable=False)
+    assert sm.has_changed("pkg", "abc") is False
+    assert sm.retries_exhausted("pkg") is True
+
+
+def test_build_verdict_still_rebuilds_on_a_new_commit(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_failure("pkg", "abc", "compile error", retriable=False)
+    assert sm.has_changed("pkg", "def") is True
+
+
+def test_failures_are_retriable_by_default(state_file):
+    sm = StateManager(str(state_file))
+    sm.record_failure("pkg", "abc", "ssh timeout")
+    assert sm.has_changed("pkg", "abc") is True
+
+
+def test_pre_existing_entries_without_the_flag_stay_retriable(state_file):
+    sm = StateManager(str(state_file))
+    sm.data["pkg"] = {"last_commit": "abc", "status": "failed"}
+    assert sm.has_changed("pkg", "abc") is True
+
+
 def test_retries_exhausted_is_false_for_healthy_repo(state_file):
     sm = StateManager(str(state_file))
     assert sm.retries_exhausted("pkg") is False

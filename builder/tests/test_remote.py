@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 
+from errors import PackageBuildError
 from remote import RemoteBuilder
 
 
@@ -274,13 +275,28 @@ class TestBuildPackage:
                 stdout="",
                 stderr="fatal: something broke",
             )
-            with pytest.raises(RuntimeError, match="Remote SDK build failed"):
+            # PackageBuildError, not a bare RuntimeError: the compile ran and
+            # returned a verdict on this commit, so the caller must not retry.
+            with pytest.raises(PackageBuildError,
+                               match="Remote SDK build failed"):
                 builder.build_package(
                     name="test-pkg",
                     makefile_subdir=None,
                     target="mediatek/filogic",
                     openwrt_version="24.10.0",
                 )
+
+    def test_infrastructure_failures_stay_retriable(self, builder):
+        builder._server_ip = "1.2.3.4"
+
+        with patch.object(builder, "_ssh_script") as mock_ssh:
+            mock_ssh.return_value = MagicMock(
+                returncode=1, stdout="", stderr="wget: unable to resolve host",
+            )
+            with pytest.raises(RuntimeError) as exc:
+                builder.setup_sdk("mediatek/filogic", "24.10.0")
+
+            assert not isinstance(exc.value, PackageBuildError)
 
 
 class TestDownloadIPKs:

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from config import load_config, TARGET_ARCH_MAP
+from errors import PackageBuildError
 from state import StateManager
 from sdk import SDKManager
 from builder import PackageBuilder, reindex_feed
@@ -177,7 +178,10 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
                     and prev.get("error") == error_msg
                 )
 
-                state.record_failure(key, commit, error_msg)
+                state.record_failure(
+                    key, commit, error_msg,
+                    retriable=not isinstance(e, PackageBuildError),
+                )
 
                 if not already_notified and bot:
                     await bot.notify_failure(key, error_msg)

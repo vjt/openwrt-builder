@@ -49,7 +49,12 @@ class StateManager:
 
     @staticmethod
     def _budget_spent(repo: dict) -> bool:
-        # Entries written before `failures` existed count as one attempt.
+        # A build verdict (compile error) is a property of the commit: it
+        # will fail identically next cycle, so it gets no retries at all.
+        # Entries written before either field existed are treated as one
+        # retriable attempt.
+        if not repo.get("retriable", True):
+            return True
         return repo.get("failures", 1) >= MAX_BUILD_ATTEMPTS
 
     def retries_exhausted(self, name: str) -> bool:
@@ -73,7 +78,8 @@ class StateManager:
         }
         self._save()
 
-    def record_failure(self, name: str, commit: str, error: str):
+    def record_failure(self, name: str, commit: str, error: str,
+                       retriable: bool = True):
         prev = self.data.get(name, {})
         already_notified = (
             prev.get("status") == "failed"
@@ -92,6 +98,7 @@ class StateManager:
             "status": "failed",
             "error": error,
             "failures": failures,
+            "retriable": retriable,
             "notified": already_notified,  # preserve if already notified
         }
         if not already_notified:
