@@ -138,6 +138,29 @@ class TestSyncRepo:
             assert cmd[0] == "rsync"
             assert "root@1.2.3.4:/tmp/src/myrepo/" in cmd[-1]
 
+    def test_sync_repo_does_not_carry_over_local_ownership(self, builder,
+                                                            tmp_path):
+        """The builder container runs as uid 1000 and the remote build runs
+        as root. Preserving owner leaves the synced clone owned by a uid
+        that does not exist there, and git refuses to touch it:
+
+            fatal: detected dubious ownership in repository at '/tmp/src/x'
+
+        which breaks any package Makefile that reads its own history.
+        """
+        builder._server_ip = "1.2.3.4"
+
+        with patch.object(builder, "_ssh") as mock_ssh, \
+             patch("remote.subprocess.run") as mock_run:
+            mock_ssh.return_value = MagicMock(returncode=0)
+            mock_run.return_value = MagicMock(returncode=0)
+
+            builder.sync_repo(str(tmp_path / "myrepo"), "myrepo")
+
+            cmd = mock_run.call_args[0][0]
+            assert "--no-owner" in cmd
+            assert "--no-group" in cmd
+
 
 class TestSetupSDK:
     def test_setup_sdk_runs_script(self, builder):

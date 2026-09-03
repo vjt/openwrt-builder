@@ -243,7 +243,12 @@ class RemoteBuilder:
 
         self._ssh("mkdir", "-p", remote_dir)
         subprocess.run(
-            ["rsync", "-az", "--delete",
+            # --no-owner/--no-group: this container runs as an unprivileged
+            # uid, the remote build runs as root. Carrying the local uid over
+            # leaves the clone owned by a user that doesn't exist there, and
+            # git then refuses to read it ("detected dubious ownership"),
+            # breaking any package Makefile that consults its own history.
+            ["rsync", "-az", "--delete", "--no-owner", "--no-group",
              "-e", f"ssh {' '.join(SSH_OPTS)} -i {self.ssh_key_path}",
              f"{local_path}/", f"root@{self._server_ip}:{remote_dir}/"],
             check=True,
