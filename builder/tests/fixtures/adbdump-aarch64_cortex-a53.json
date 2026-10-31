@@ -1,0 +1,460 @@
+{
+  "packages": [
+    {
+      "name": "liblz4-1",
+      "version": "1.10.0-r1",
+      "hashes": "a9edf2fc5f755f7e4c4fbeb86f0a3eb921f67f04cc2e7cfc8a9b77ab0b1d9dbc",
+      "description": "LZ4 is a compression codec that features a very fast encoder and an even faster decoder. This package provides the liblz4 shared library.",
+      "arch": "aarch64_cortex-a53",
+      "license": "BSD-2-Clause",
+      "origin": "feeds/packages/feeds/packages/libs/liblz4",
+      "maintainer": "Darik Horn <dajhorn@vanadac.com>",
+      "url": "https://www.lz4.org/",
+      "installed-size": 131122,
+      "file-size": 57531,
+      "provider-priority": 10,
+      "depends": [
+        "libc"
+      ],
+      "provides": [
+        "liblz4",
+        "liblz4-any"
+      ],
+      "tags": [
+        "openwrt:abiversion=-1"
+      ]
+    },
+    {
+      "name": "libusb-1.0-0",
+      "version": "1.0.29-r1",
+      "hashes": "e75e2bb9203535ea2e2e7875fd3430d7f190bacd33b0ae301e1c64eb83b8fcc9",
+      "description": "libusb is a C library that gives applications easy access to USB devices on many different operating systems.",
+      "arch": "aarch64_cortex-a53",
+      "license": "LGPL-2.1-or-later",
+      "origin": "feeds/base/libs/libusb",
+      "maintainer": "Felix Fietkau <nbd@nbd.name>",
+      "url": "https://libusb.info/",
+      "installed-size": 131177,
+      "file-size": 35842,
+      "provider-priority": 10,
+      "depends": [
+        "libatomic1",
+        "libc",
+        "libpthread",
+        "librt"
+      ],
+      "provides": [
+        "libusb-1.0",
+        "libusb-1.0-any"
+      ],
+      "tags": [
+        "openwrt:abiversion=-0"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.2.0-r0",
+      "hashes": "e1a0912d06afbb21bcc3b955eb4c464b7af2919ca4ae5f83ff5184f2910629a8",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 118954,
+      "file-size": 33633,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.2.1-r0",
+      "hashes": "991e3e5f3a7662d62fb369d5ee096db37d5ca93bfaa96844e414911a8857f3fe",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 119727,
+      "file-size": 33907,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.2.2-r0",
+      "hashes": "8cc6838624af6718cdd3a7f6684dd199db6e6667219fd8fab308dab6360f245a",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 119574,
+      "file-size": 33823,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.2.3-r1",
+      "hashes": "221303fdd242a776345eb6f22f01efb6e040d4195415c825da06a9bca9f865e6",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 123305,
+      "file-size": 35074,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.2.3-r2",
+      "hashes": "32b60cca20caa684d31e8c7bf6f512e747c485de38baf0c3f08f90097f08e0f3",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 126567,
+      "file-size": 35967,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.3.0-r1",
+      "hashes": "0fe05c22a9675c9276b76ff18bcd6a26a60dcab1503000f9870d5ac7dc9d85a3",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 130790,
+      "file-size": 37501,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.3.0-r2",
+      "hashes": "8f8f6954d8cd177a38c61b2ebddbee325b9ad87e18bcb482b5cbd83f8a374800",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via mmcli and forces a re-attach (disable/enable, mode-toggle fallback). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 130902,
+      "file-size": 37554,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.4.0-r1",
+      "hashes": "a061992da2ea8107f51ae8bd432b8cc4e698170568ce1d618a68060302d68191",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 136159,
+      "file-size": 38925,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.5.0-r1",
+      "hashes": "597f7f7a0dcdf4a93e20b57f318dd70dbde940b1665d2b17b72de4ba20f7f7f0",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 136867,
+      "file-size": 39203,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.5.1-r1",
+      "hashes": "6730af3c44df930969fc770a98e467c67a8210e76ad2d1041a0ada00687980c7",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 136867,
+      "file-size": 39202,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.6.0-r1",
+      "hashes": "2333e27c512969d460dae9df2750b55894351b3fa71dd6085cdebe5e0f130ff2",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 136867,
+      "file-size": 39202,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.7.1-r1",
+      "hashes": "2ce19fa3b96baa157313ffec90331048350fc72a44dcac4f6fbbc1c77cfc045f",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 158590,
+      "file-size": 46855,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.9.0-r1",
+      "hashes": "6434b5c1d9889dafc34b1280c71e0adb88da2e4f6e307a741f9eab557f2f99f5",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 175205,
+      "file-size": 52831,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.9.1-r1",
+      "hashes": "9c5c970de30bbb134ecfd6da18f3f84c2071af9a4e0880399093737baac4874b",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 175754,
+      "file-size": 53021,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "quectel-5g-tools",
+      "version": "1.10.2-r1",
+      "hashes": "c3dcde1d04ee73018e9994c8975c42523bb05f4ed512d866e02d68c7be38f814",
+      "description": "A collection of Lua tools for monitoring and configuring Quectel 5G modems. Designed for GL.iNET routers with Quectel RM520N-GL modems. Includes: - 5g-info: CLI tool for displaying modem information - 5g-monitor: Real-time TUI monitor with signal quality display and beeps - 5g-led-bars: procd service driving the GL-X3000 5G signal LEDs from RSRP - 5g-watchdog: procd service that detects NSA NR SCG drops via AT and forces a re-attach (mode_toggle, then bearer_reconnect). - at: Simple AT command wrapper - 5g-lock: Band and cell locking utility - Prometheus collector for prometheus-node-exporter-lua",
+      "arch": "aarch64_cortex-a53",
+      "license": "MIT",
+      "origin": "/tmp/src/quectel-5g-tools/openwrt/quectel-5g-tools",
+      "maintainer": "Marcello Barnaba <mbarnaba@meta.com>",
+      "url": "https://github.com/vjt/quectel-5g-tools",
+      "installed-size": 190689,
+      "file-size": 57987,
+      "depends": [
+        "curl",
+        "libc",
+        "libuci-lua",
+        "lua",
+        "luaposix",
+        "luci-lib-jsonc",
+        "modemmanager"
+      ],
+      "provides": [
+        "quectel-5g-tools-any"
+      ]
+    },
+    {
+      "name": "wifi-dethrash-collector",
+      "version": "0.4.0-r1",
+      "hashes": "f3f61b0332a5867a0388153664826d4b912ed52b8d0dccb98b322dfaf5dd106a",
+      "description": "Custom prometheus-node-exporter-lua collector that exports WiFi radio txpower, channel, 802.11r/k/v config, usteer thresholds, and usteer runtime data (hearing map, roam events, channel load).",
+      "arch": "noarch",
+      "origin": "/tmp/src/openwrt-dethrash/openwrt/wifi-dethrash-collector",
+      "installed-size": 7819,
+      "file-size": 3034,
+      "depends": [
+        "libc",
+        "libuci-lua",
+        "luci-lib-nixio",
+        "prometheus-node-exporter-lua"
+      ],
+      "provides": [
+        "wifi-dethrash-collector-any"
+      ]
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1-r1",
+      "hashes": "c0b6d9eb0fff790f955e9dc26e7a91de7a72aff441e39d706dbf3174d3534524",
+      "description": "zlib is a lossless data-compression library. This package includes the shared library.",
+      "arch": "aarch64_cortex-a53",
+      "license": "Zlib",
+      "origin": "feeds/base/libs/zlib",
+      "url": "http://www.zlib.net/",
+      "installed-size": 131134,
+      "file-size": 36750,
+      "depends": [
+        "libc"
+      ],
+      "provides": [
+        "zlib-any"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Read metadata out of apk-tools 3 (.apk, ADB format) packages.
+"""Read metadata out of apk-tools 3 (.apk, ADB format) packages and indexes.
 
 Debian ships no apk-tools, and the only field the feed logic needs is the
 package architecture, so read it straight from the ADB structure instead
@@ -11,6 +11,7 @@ block payload in the low 28.
 """
 from __future__ import annotations
 
+import json
 import struct
 import zlib
 from pathlib import Path
@@ -64,3 +65,31 @@ def apk_arch(path: Path) -> str:
     if len(info) <= _PI_ARCH:
         raise ValueError(f"{path}: package info carries no arch")
     return blob(info[_PI_ARCH]).decode()
+
+
+_ABIVERSION_TAG = "openwrt:abiversion="
+
+
+def index_json(adbdump: str, architecture: str) -> dict:
+    """Build the feed's index.json from `apk adbdump --format json` output.
+
+    Port of openwrt.git scripts/make-index-json.py (apk path, format v2),
+    which upstream runs next to every packages.adb. owut reads it to learn
+    which versions an external feed offers: it fetches the repository URL
+    with "packages.adb" replaced by "index.json". Package names lose their
+    ABI-version suffix, as upstream does for the ASU server.
+
+    mkndx lists a package's versions oldest to newest, so when a feed keeps
+    several versions the newest one is what lands in the map.
+    """
+    packages: dict[str, str] = {}
+    for package in json.loads(adbdump)["packages"]:
+        name: str = package["name"]
+        for tag in package.get("tags", []):
+            if tag.startswith(_ABIVERSION_TAG):
+                abi = tag[len(_ABIVERSION_TAG):]
+                if abi and name.endswith(abi):
+                    name = name[:-len(abi)]
+                break
+        packages[name] = package["version"]
+    return {"version": 2, "architecture": architecture, "packages": packages}
