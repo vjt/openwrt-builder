@@ -97,7 +97,11 @@ apk update
 Each per-arch index carries both arch-specific packages and any
 `targets: [all]` arch-independent packages — those get hardlinked
 into every per-arch feed dir at reindex time, OpenWrt distfeeds
-convention. So a single `http://<server>:8081` line covers the whole
+convention. A `targets: [all]` package that still comes out
+arch-specific (no `PKGARCH:=all`) is only linked into its own arch.
+apk downloads a package from `<base>/<package arch>/`, so noarch
+packages are fetched from `/noarch/`, which nginx serves out of
+`/all/`. So a single `http://<server>:8081` line covers the whole
 catalogue for that router.
 
 `/all/` itself is still indexed (and signed) for the legacy opkg flow
