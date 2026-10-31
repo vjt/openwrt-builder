@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
+from apk import index_json
 from config import TARGET_ARCH_MAP
 from errors import PackageBuildError
 from sdk import sdk_url
@@ -612,13 +615,19 @@ echo "===PKG_LIST_END==="
     def reindex_apk_feed(self, local_dir: str, openwrt_version: str,
                          target: str,
                          apk_signing_key: str | None = None) -> Path | None:
-        """Regenerate APKINDEX.tar.gz for an apk feed directory.
+        """Regenerate the apk index files of an apk feed directory.
 
         apk-tools 3.x is required and not shipped on Debian; we reuse the apk
         binary from the OpenWrt SDK (`staging_dir/host/bin/apk`) on the already
         provisioned Hetzner server. Uploads every .apk in local_dir to the
-        remote, invokes `apk mkndx`, and downloads the produced
-        APKINDEX.tar.gz back. Returns the local index path on success.
+        remote, invokes `apk mkndx`, and downloads the index back.
+
+        The index is published under both names apk clients ask for:
+        packages.adb, the upstream name, for repository lines that point at
+        it (owut needs those: it derives the index.json URL by replacing
+        "packages.adb"), and APKINDEX.tar.gz for lines that give only the
+        feed base URL. Next to it goes index.json, built like upstream's
+        from `apk adbdump`. Returns the local packages.adb path on success.
 
         When apk_signing_key is provided, the index is signed with that ECDSA
         PEM private key. Routers add the matching public key to
@@ -665,7 +674,8 @@ if [ ! -x {apk_bin} ]; then
     echo "apk binary missing at {apk_bin}" >&2
     exit 1
 fi
-{apk_bin} --allow-untrusted mkndx {sign_args} -o APKINDEX.tar.gz *.apk
+{apk_bin} --allow-untrusted mkndx {sign_args} -o packages.adb *.apk
+{apk_bin} adbdump --format json packages.adb > adbdump.json
 """
         result = self._ssh_script(index_script, check=False)
         if result.returncode != 0:
@@ -674,8 +684,16 @@ fi
                 f"{(result.stdout or '') + (result.stderr or '')}"
             )
 
-        local_index = local / "APKINDEX.tar.gz"
-        self._scp_from(f"{remote_feed}/APKINDEX.tar.gz", str(local_index))
+        local_index = local / "packages.adb"
+        self._scp_from(f"{remote_feed}/packages.adb", str(local_index))
+        shutil.copyfile(local_index, local / "APKINDEX.tar.gz")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = Path(tmp) / "adbdump.json"
+            self._scp_from(f"{remote_feed}/adbdump.json", str(dump))
+            index = index_json(dump.read_text(), local.name)
+        (local / "index.json").write_text(json.dumps(index, indent=2) + "\n")
+
         logger.info("apk reindex complete for %s", local)
         return local_index
 

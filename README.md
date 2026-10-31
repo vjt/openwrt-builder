@@ -18,7 +18,8 @@ OpenWrt changed package format at 25.12: `<= 24.10` emits `.ipk`
 (opkg/Packages.gz), `>= 25.12` emits `.apk` (apk-tools 3.x /
 APKINDEX.tar.gz). The builder handles both — each repo can target one or
 more OpenWrt versions via `openwrt_versions:` in config, and every arch
-dir gets both an opkg `Packages` index and an `APKINDEX.tar.gz` when the
+dir gets both an opkg `Packages` index and an apk index (`packages.adb`,
+also published as `APKINDEX.tar.gz`, plus `index.json` for owut) when the
 format is present.
 
 For SDK builds, the builder spins up an on-demand Hetzner CX instance:
@@ -86,13 +87,21 @@ echo "src/gz custom http://<server>:8081/all" >> /etc/opkg/customfeeds.conf
 opkg update
 ```
 
-On OpenWrt >= 25.12 (apk) — point at the *base* URL only. apk's
-customfeeds client appends `/<arch>/APKINDEX.tar.gz` automatically:
+On OpenWrt >= 25.12 (apk) — point at the arch dir's `packages.adb`,
+the same form as the stock `distfeeds.list` lines:
 
 ```bash
-echo "http://<server>:8081" >> /etc/apk/repositories.d/customfeeds.list
+echo "http://<server>:8081/$(cat /etc/apk/arch)/packages.adb" \
+    >> /etc/apk/repositories.d/customfeeds.list
 apk update
 ```
+
+`owut` needs this form: it finds a feed's `index.json` (published next
+to every per-arch index, upstream format) by replacing `packages.adb` in
+the repository line. A bare base URL (`http://<server>:8081`) still
+works for apk, which then appends `/<arch>/APKINDEX.tar.gz`, but owut
+fetches the base URL itself and fails, unless run with
+`--repositories-mode disable`.
 
 Each per-arch index carries both arch-specific packages and any
 `targets: [all]` arch-independent packages — those get hardlinked
@@ -145,7 +154,7 @@ cd builder && ../.venv/bin/python3 -m pytest tests/ -v
 Use `targets: [all]` for pure Lua/config packages (architecture-independent).
 The build runs once against any cached SDK; the resulting `.apk` is
 hardlinked into every per-arch feed dir at reindex time so apk-based
-routers can resolve it via `<base>/<arch>/APKINDEX.tar.gz`. The opkg
+routers can resolve it via `<base>/<arch>/packages.adb`. The opkg
 side keeps `<base>/all/Packages.gz` for legacy `install-feed.sh`
 clients pointing at `/all` explicitly.
 
