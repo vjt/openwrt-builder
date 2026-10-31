@@ -9,18 +9,25 @@ logger = logging.getLogger(__name__)
 # ARM targets that need the _eabi suffix
 EABI_TARGETS = {"bcm27xx/bcm2709"}
 
-# GCC toolchain version shipped in each OpenWrt release.
-# Must be kept in sync with https://downloads.openwrt.org/releases/<ver>/targets/
+# GCC toolchain shipped in each OpenWrt release series. Point releases
+# (25.12.0, 25.12.6, ...) share their series' toolchain, so key by
+# "<major>.<minor>". Keep in sync with
+# https://downloads.openwrt.org/releases/<ver>/targets/
 GCC_VERSIONS: dict[str, str] = {
-    "24.10.0": "13.3.0",
-    "25.12.0": "14.3.0",
+    "24.10": "13.3.0",
+    "25.12": "14.3.0",
     "SNAPSHOT": "14.3.0",
 }
-DEFAULT_GCC_VERSION = "13.3.0"
 
 
 def _gcc_for(version: str) -> str:
-    return GCC_VERSIONS.get(version, DEFAULT_GCC_VERSION)
+    series = ".".join(version.split(".")[:2])  # "SNAPSHOT" maps to itself
+    if series not in GCC_VERSIONS:
+        raise ValueError(
+            f"Unknown OpenWrt release {version!r}: add its series' gcc "
+            f"version to GCC_VERSIONS in sdk.py"
+        )
+    return GCC_VERSIONS[series]
 
 
 def _releases_path(version: str) -> str:

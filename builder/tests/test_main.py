@@ -1,3 +1,7 @@
+import os
+import shutil
+from pathlib import Path
+
 import pytest
 
 import main
@@ -178,3 +182,61 @@ async def test_new_commit_rebuilds_after_exhausted_retries(config, state,
 
     assert fixed.builds == 1
     assert state.get_repo("pkg@24.10.0")["status"] == "ok"
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+NOARCH_APK = "wifi-dethrash-collector-0.4.0-r1.apk"
+AARCH64_APK = "quectel-5g-tools-1.2.0-r0.apk"  # arch-specific, from targets: [all]
+
+
+def make_feed(tmp_path, *apks):
+    """A feed with all/ holding `apks` and empty aarch64 + mipsel dirs,
+    queued for reindex the way a cycle that built an all-target repo does."""
+    feed = tmp_path / "feed"
+    (feed / "all").mkdir(parents=True)
+    for name in apks:
+        shutil.copy(FIXTURES / name, feed / "all" / name)
+    for arch in ("aarch64_cortex-a53", "mipsel_24kc"):
+        (feed / arch).mkdir()
+    reindex = {str(feed / "all"): ("25.12.0", "all")}
+    return feed, reindex
+
+
+def test_noarch_apk_is_mirrored_into_every_arch_feed(tmp_path):
+    feed, reindex = make_feed(tmp_path, NOARCH_APK)
+
+    main.mirror_all_apks(feed, reindex)
+
+    for arch in ("aarch64_cortex-a53", "mipsel_24kc"):
+        assert (feed / arch / NOARCH_APK).exists()
+        assert str(feed / arch) in reindex
+
+
+def test_arch_specific_apk_only_lands_in_its_own_arch_feed(tmp_path):
+    feed, reindex = make_feed(tmp_path, AARCH64_APK)
+
+    main.mirror_all_apks(feed, reindex)
+
+    assert (feed / "aarch64_cortex-a53" / AARCH64_APK).exists()
+    assert not (feed / "mipsel_24kc" / AARCH64_APK).exists()
+
+
+def test_stale_wrong_arch_mirror_is_removed_and_reindexed(tmp_path):
+    feed, reindex = make_feed(tmp_path, AARCH64_APK)
+    stale = feed / "mipsel_24kc" / AARCH64_APK
+    os.link(feed / "all" / AARCH64_APK, stale)  # left by an earlier cycle
+
+    main.mirror_all_apks(feed, reindex)
+
+    assert not stale.exists()
+    assert str(feed / "mipsel_24kc") in reindex
+
+
+def test_same_named_apk_built_for_that_arch_is_left_alone(tmp_path):
+    feed, reindex = make_feed(tmp_path, AARCH64_APK)
+    own_build = feed / "mipsel_24kc" / AARCH64_APK
+    own_build.write_bytes(b"a real per-arch build, not our mirror")
+
+    main.mirror_all_apks(feed, reindex)
+
+    assert own_build.read_bytes() == b"a real per-arch build, not our mirror"

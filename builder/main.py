@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from apk import NOARCH, apk_arch
 from config import load_config, TARGET_ARCH_MAP
 from errors import PackageBuildError
 from state import StateManager
@@ -53,6 +54,61 @@ def _state_key(name: str, version: str) -> str:
 
 def _needs_apk_indexing(pkgs: list[Path]) -> bool:
     return any(p.suffix == ".apk" for p in pkgs)
+
+
+def mirror_all_apks(feed_dir: Path,
+                    apk_dirs_to_reindex: dict[str, tuple[str, str]]) -> None:
+    """Propagate .apk files from feed/all/ into the per-arch feed dirs that
+    can install them, before the apk reindex.
+
+    apk on a 25.12 router with `customfeeds.list = http://host/` appends
+    `/<arch>/APKINDEX.tar.gz` when fetching the index — there is no
+    `noarch` or `all` lookup, so anything left only in /feed/all/ is
+    invisible to apk clients. Stock OpenWrt distfeeds embed arch-indep
+    packages in every per-arch index; mirror that by hardlinking.
+
+    A `targets: [all]` repo whose package lacks PKGARCH:=all still yields
+    an arch-specific .apk (built with whichever SDK was picked): that one
+    goes only into its own arch dir. A mirror of it left in another arch
+    dir by an earlier cycle (same inode as the all/ file) is removed. Every
+    arch dir whose contents may have changed is queued for reindex.
+
+    /feed/all/ is *also* still indexed in its own right because legacy
+    opkg routers (install-feed.sh world) point at http://host/all/.
+    """
+    all_dir = feed_dir / "all"
+    if str(all_dir) not in apk_dirs_to_reindex or not all_dir.exists():
+        return
+
+    all_apks = [(src, apk_arch(src)) for src in sorted(all_dir.glob("*.apk"))]
+    sample_version, _sample_target = apk_dirs_to_reindex[str(all_dir)]
+    for arch_target, arch_name in TARGET_ARCH_MAP.items():
+        arch_dir = feed_dir / arch_name
+        if not arch_dir.exists():
+            continue
+        for src, pkg_arch in all_apks:
+            dst = arch_dir / src.name
+            mirrored = dst.exists() and dst.stat().st_ino == src.stat().st_ino
+            if pkg_arch not in (NOARCH, arch_name):
+                if mirrored:
+                    dst.unlink()
+                continue
+            if mirrored:
+                continue
+            if dst.exists():
+                dst.unlink()
+            try:
+                os.link(src, dst)
+            except OSError:
+                # Cross-filesystem or hardlinks unsupported — fall
+                # back to a regular copy so the feed still works.
+                shutil.copy2(src, dst)
+        # Use this arch's target for the reindex tuple; only matters
+        # for SDK lookup on the remote (the apk binary itself is
+        # arch-independent). Don't clobber an existing entry that
+        # came from a real per-arch build in this same cycle.
+        apk_dirs_to_reindex.setdefault(
+            str(arch_dir), (sample_version, arch_target))
 
 
 async def run_build_cycle(config: dict[str, Any], state: StateManager,
@@ -186,46 +242,7 @@ async def run_build_cycle(config: dict[str, Any], state: StateManager,
                 if not already_notified and bot:
                     await bot.notify_failure(key, error_msg)
 
-    # Propagate arch-independent .apk files from feed/all/ into every
-    # per-arch feed dir before the apk reindex.
-    #
-    # apk on a 25.12 router with `customfeeds.list = http://host/`
-    # appends `/<arch>/APKINDEX.tar.gz` when fetching the index — there
-    # is no `noarch` or `all` lookup. Anything we leave in /feed/all/
-    # is therefore invisible to apk-based clients. Stock OpenWrt
-    # distfeeds dodge this by embedding arch-indep packages in every
-    # per-arch index. Mirror that: hardlink every all/*.apk into each
-    # existing per-arch dir, then queue those dirs for reindex too.
-    #
-    # /feed/all/ is *also* still indexed in its own right (same
-    # apk_dirs_to_reindex entry) because legacy opkg routers
-    # (install-feed.sh world) point at http://host/all/ explicitly.
-    all_dir = Path(FEED_DIR) / "all"
-    if str(all_dir) in apk_dirs_to_reindex and all_dir.exists():
-        all_apks = sorted(all_dir.glob("*.apk"))
-        sample_version, _sample_target = apk_dirs_to_reindex[str(all_dir)]
-        for arch_target, arch_name in TARGET_ARCH_MAP.items():
-            arch_dir = Path(FEED_DIR) / arch_name
-            if not arch_dir.exists():
-                continue
-            for src in all_apks:
-                dst = arch_dir / src.name
-                try:
-                    if dst.exists() and dst.stat().st_ino == src.stat().st_ino:
-                        continue
-                    if dst.exists():
-                        dst.unlink()
-                    os.link(src, dst)
-                except OSError:
-                    # Cross-filesystem or hardlinks unsupported — fall
-                    # back to a regular copy so the feed still works.
-                    shutil.copy2(src, dst)
-            # Use this arch's target for the reindex tuple; only matters
-            # for SDK lookup on the remote (the apk binary itself is
-            # arch-independent). Don't clobber an existing entry that
-            # came from a real per-arch build in this same cycle.
-            apk_dirs_to_reindex.setdefault(
-                str(arch_dir), (sample_version, arch_target))
+    mirror_all_apks(Path(FEED_DIR), apk_dirs_to_reindex)
 
     # Reindex apk feeds once per touched arch dir. The Hetzner server is still
     # up at this point — the outer loop destroys it after this returns.
