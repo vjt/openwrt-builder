@@ -6,6 +6,9 @@ from pathlib import Path
 from errors import PackageBuildError
 from remote import RemoteBuilder
 
+ADBDUMP = (Path(__file__).parent / "fixtures"
+           / "adbdump-aarch64_cortex-a53.json").read_text()
+
 
 @pytest.fixture
 def builder():
@@ -205,9 +208,21 @@ class TestReindexApkFeed:
         (d / "pkg-1.0.apk").write_bytes(b"fake")
         return d
 
+    @staticmethod
+    def _fake_scp_from(remote_path, local_path):
+        """Stand in for the files mkndx and adbdump leave on the remote."""
+        name = Path(remote_path).name
+        if name == "packages.adb":
+            Path(local_path).write_bytes(b"ADBd fake index")
+        elif name == "adbdump.json":
+            Path(local_path).write_text(ADBDUMP)
+        else:
+            raise FileNotFoundError(remote_path)
+
     def _reindex(self, builder, feed_dir, target):
         with patch.object(builder, "_ssh_script") as mock_ssh, \
-                patch.object(builder, "_scp_from"), \
+                patch.object(builder, "_scp_from",
+                             side_effect=self._fake_scp_from), \
                 patch("subprocess.run") as mock_run:
             mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
             mock_run.return_value = MagicMock(returncode=0)
@@ -241,7 +256,8 @@ class TestReindexApkFeed:
 
         with patch.object(builder, "setup_sdk") as mock_setup, \
                 patch.object(builder, "_ssh_script") as mock_ssh, \
-                patch.object(builder, "_scp_from"), \
+                patch.object(builder, "_scp_from",
+                             side_effect=self._fake_scp_from), \
                 patch("subprocess.run") as mock_run:
             mock_setup.return_value = "/opt/sdk/provisioned-on-demand"
             mock_ssh.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -250,6 +266,21 @@ class TestReindexApkFeed:
 
             mock_setup.assert_called_once_with("ath79/tiny",
                                                openwrt_version="25.12.0")
+
+    def test_publishes_index_under_both_apk_names_with_owut_index_json(
+            self, builder, feed_dir):
+        builder._server_ip = "1.2.3.4"
+        builder._setup_done.add(("ath79/tiny", "25.12.0"))
+
+        self._reindex(builder, feed_dir, "ath79/tiny")
+
+        index = (feed_dir / "packages.adb").read_bytes()
+        assert index == b"ADBd fake index"
+        assert (feed_dir / "APKINDEX.tar.gz").read_bytes() == index
+        published = json.loads((feed_dir / "index.json").read_text())
+        assert published["architecture"] == "mips_24kc"
+        assert published["packages"]["wifi-dethrash-collector"] == "0.4.0-r1"
+        assert not (feed_dir / "adbdump.json").exists()
 
     def test_skips_empty_feed_dir(self, builder, tmp_path):
         builder._server_ip = "1.2.3.4"
