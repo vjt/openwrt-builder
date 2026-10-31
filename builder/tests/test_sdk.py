@@ -45,6 +45,28 @@ def test_sdk_url_ath79():
     )
 
 
+def test_sdk_url_point_release_uses_series_toolchain():
+    # 25.12.6 ships the same gcc as 25.12.0; a point release must not fall
+    # back to another series' toolchain and 404 on download.
+    url = sdk_url("25.12.6", "ramips/mt7621")
+    assert url == (
+        "https://downloads.openwrt.org/releases/25.12.6/"
+        "targets/ramips/mt7621/"
+        "openwrt-sdk-25.12.6-ramips-mt7621_gcc-14.3.0_musl"
+        ".Linux-x86_64.tar.zst"
+    )
+    assert sdk_dirname("24.10.5", "mediatek/filogic") == (
+        "openwrt-sdk-24.10.5-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64"
+    )
+
+
+def test_sdk_dirname_unknown_series_raises():
+    # Guessing a toolchain for an unknown release yields an SDK URL that
+    # 404s later, on the remote box; fail where the cause is visible.
+    with pytest.raises(ValueError, match="23.05.5"):
+        sdk_dirname("23.05.5", "ramips/mt7621")
+
+
 def test_sdk_dirname():
     assert sdk_dirname("24.10.0", "mediatek/filogic") == (
         "openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64"
